@@ -31,3 +31,12 @@ final currentFamilyProvider = FutureProvider<Family?>((ref) async {
   if (appUser?.familyId == null) return null;
   return ref.watch(authRepositoryProvider).fetchFamily(appUser!.familyId!);
 });
+
+/// Everyone in the caller's family (RLS already scopes the query — the
+/// filter here is belt-and-braces, not the security boundary).
+final familyMembersProvider = FutureProvider<List<AppUser>>((ref) async {
+  final appUser = await ref.watch(currentAppUserProvider.future);
+  if (appUser?.familyId == null) return const [];
+  final rows = await supabase.from('users').select().eq('family_id', appUser!.familyId!);
+  return (rows as List).map((r) => AppUser.fromJson(r as Map<String, dynamic>)).toList();
+});

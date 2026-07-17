@@ -58,3 +58,87 @@ Drift database (docs/03-architecture.md, "Local storage") is actually
 implemented** — confirm the pin still supports whatever Drift version is
 in use at that point, or find an environment where the GitHub download
 succeeds and drop the override.
+
+## Modules 2–12 (full build pass)
+
+### Chat: application-layer E2E encryption deferred
+
+`03-architecture.md` §3 calls for message bodies encrypted client-side
+(libsodium sealed boxes per chat) before hitting `messages.body`. That
+needs a per-family key-distribution scheme tied to device provisioning
+(key generation on device, escrow/recovery for parents, key rotation on
+member removal) — a design that shouldn't be improvised mid-module.
+Currently bodies travel over TLS and sit behind family-scoped RLS, but
+Supabase can technically read them. The repository (`chat_repository.dart`)
+carries a matching note. Design and implement the key scheme before any
+production launch.
+
+### GPS: foreground check-in only; background tracking blocked on entitlements
+
+Battery-conscious background tracking (iOS significant-location-change /
+region monitoring, Android FusedLocationProvider + foreground service)
+requires capabilities, purpose strings, and store declarations a human
+must configure (docs/03-architecture.md §4). Implemented instead: manual
+"Check in" (geolocator, foreground permission), latest-location list,
+safe-zone CRUD centred on the current position. Safe-zone entry/exit
+detection (and its alerts) activates once background location lands.
+The full-bleed map view also awaits Google Maps API keys per platform;
+the UI is list-first until then.
+
+### Device restriction: workflow only, no OS-level enforcement yet
+
+The unlock request → approve → one-time code lifecycle is fully
+implemented (tables, Edge Function `unlock-code` with generate/redeem/
+reject, parent and child UI, audit logging). What is NOT implemented is
+actual OS-level app restriction: iOS Family Controls requires an Apple
+entitlement request that must be approved before the capability can even
+be tested (docs/05-build-sequence.md Module 6 flags this as a human
+task), and the Android restriction level needs a family decision
+(launcher overlay vs full device-policy enrollment). The escalation
+pipeline stops at level 4 (parent notified) until then — level 5 hooks in
+once the entitlement exists.
+
+### SOS: SMS fallback not configured
+
+`sos-fanout` delivers push + in-app notifications to all parents. The
+spec's "SMS fallback if configured" needs a Twilio (or similar) account
+and sender registration — human setup; the function skips SMS silently
+when TWILIO_* env vars are absent.
+
+### Notifications: FCM delivery needs the Firebase service account
+
+`schedule-notifications` writes every reminder/escalation row (so the
+in-app inbox always works) and delivers via FCM HTTP v1 only when
+FCM_SERVICE_ACCOUNT_JSON is set as a function secret. APNs delivery for
+iOS goes through the same FCM project once the APNs key is uploaded to
+Firebase — human setup in both consoles. Local scheduled notifications
+(flutter_local_notifications) are wired in the dependency list but the
+device-side scheduling hookup lands with the push wiring, so reminder
+level 1 currently arrives via server push/inbox rather than an
+offline-capable local alarm.
+
+### Reports: client-side aggregation, no PDF/CSV export yet
+
+Weekly per-child completion and points come from client-side queries. At
+family scale this is fine; the exportable PDF/CSV report (product spec
+§14) should be a Postgres view + Edge Function when added, not more
+client aggregation.
+
+### AI assistant: deterministic, fully local
+
+The daily briefing and natural-language quick-add are deliberately
+implemented as local, deterministic logic over the caller's own visible
+data — no LLM call, so no family data leaves the account scope (the §16
+boundary) and a child's queries can never see parent-only data because
+they run under the child's own RLS session. If a hosted-LLM upgrade is
+ever wanted, it must be proxied through an Edge Function that enforces
+the same scoping and must be a family-level opt-in in Settings.
+
+### Auth: phone sign-in, MFA, biometric gate, PIN login not yet wired
+
+Email/password, Apple, and Google sign-in are implemented. Phone OTP,
+optional parent MFA, the biometric session gate, and child PIN login on
+shared devices (the `pin_hash` column and hashing exist in
+`create-child-account`) are follow-ups within Module 1's spec — none of
+them block the other modules and each needs provider/platform config
+(SMS provider for OTP, platform biometric APIs).

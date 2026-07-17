@@ -15,7 +15,12 @@ class AppShell extends StatelessWidget {
     final colors = context.appColors;
     return Scaffold(
       body: navigationShell,
-      bottomNavigationBar: BottomNavigationBar(
+      // Long-press anywhere on the tab bar = fast SOS entry, reachable in
+      // one motion from any tab (docs/04-design-system.md "Mobile
+      // navigation").
+      bottomNavigationBar: GestureDetector(
+        onLongPress: () => GoRouter.of(context).push('/sos'),
+        child: BottomNavigationBar(
         currentIndex: navigationShell.currentIndex,
         onTap: (index) => navigationShell.goBranch(
           index,
@@ -45,8 +50,9 @@ class AppShell extends StatelessWidget {
           ),
           const BottomNavigationBarItem(icon: Icon(Icons.more_horiz), label: 'More'),
         ],
-        selectedItemColor: colors.emerald900,
-        unselectedItemColor: colors.gray[5],
+          selectedItemColor: colors.emerald900,
+          unselectedItemColor: colors.gray[5],
+        ),
       ),
     );
   }

@@ -17,11 +17,13 @@ class MoreScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.appColors;
     final items = <_MoreItem>[
+      _MoreItem('Daily Briefing', Icons.wb_sunny_outlined, '/briefing'),
       _MoreItem('Live Location', Icons.map_outlined, '/gps'),
-      _MoreItem('Rewards', Icons.emoji_events_outlined, null),
-      _MoreItem('Reports', Icons.bar_chart_outlined, null),
-      _MoreItem('Unlock Requests', Icons.lock_open_outlined, null),
-      _MoreItem('Settings', Icons.settings_outlined, null),
+      _MoreItem('Rewards', Icons.emoji_events_outlined, '/rewards'),
+      _MoreItem('Reports', Icons.bar_chart_outlined, '/reports'),
+      _MoreItem('Unlock Requests', Icons.lock_open_outlined, '/unlock-requests'),
+      _MoreItem('Notifications', Icons.notifications_none_outlined, '/notifications'),
+      _MoreItem('Family Settings', Icons.settings_outlined, '/family-settings'),
     ];
 
     return Scaffold(
@@ -46,7 +48,7 @@ class MoreScreen extends ConsumerWidget {
             child: ListTile(
               leading: Icon(Icons.sos_outlined, color: colors.danger),
               title: Text('Emergency SOS', style: TextStyle(color: colors.danger, fontWeight: FontWeight.w600)),
-              onTap: () {},
+              onTap: () => context.push('/sos'),
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
