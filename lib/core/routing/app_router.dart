@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../auth/app_lock_service.dart';
 import '../auth/auth_providers.dart';
 import '../auth/presentation/family_setup_screen.dart';
+import '../auth/presentation/lock_screen.dart';
 import '../auth/presentation/sign_in_screen.dart';
 import '../auth/presentation/splash_screen.dart';
 import '../../features/ai_assistant/presentation/daily_briefing_screen.dart';
@@ -17,6 +19,7 @@ import '../../features/rewards/presentation/rewards_screen.dart';
 import '../../features/settings/presentation/family_members_screen.dart';
 import '../../features/settings/presentation/family_settings_screen.dart';
 import '../../features/settings/presentation/more_screen.dart';
+import '../../features/settings/presentation/security_settings_screen.dart';
 import '../../features/sos/presentation/sos_screen.dart';
 import '../../features/tasks/domain/task_model.dart';
 import '../../features/tasks/presentation/task_completed_screen.dart';
@@ -31,11 +34,18 @@ import 'router_refresh_stream.dart';
 /// through these same route paths once Module 4 (Notifications) lands.
 final appRouterProvider = Provider<GoRouter>((ref) {
   final authRepository = ref.watch(authRepositoryProvider);
+  final isLocked = ref.watch(appLockStateProvider);
 
   return GoRouter(
     initialLocation: '/splash',
     refreshListenable: RouterRefreshStream(authRepository.onAuthStateChange),
     redirect: (context, state) {
+      // App lock gate first — but SOS must stay reachable from a locked
+      // state (product spec §11).
+      if (isLocked && state.matchedLocation != '/lock' && state.matchedLocation != '/sos') {
+        return '/lock';
+      }
+
       final isSignedIn = authRepository.currentSession != null;
       final goingToAuth = state.matchedLocation == '/sign-in' ||
           state.matchedLocation == '/family-setup' ||
@@ -48,6 +58,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
+      GoRoute(path: '/lock', builder: (context, state) => const LockScreen()),
       GoRoute(path: '/sign-in', builder: (context, state) => const SignInScreen()),
       GoRoute(path: '/family-setup', builder: (context, state) => const FamilySetupScreen()),
       GoRoute(path: '/gps', builder: (context, state) => const GpsScreen()),
@@ -58,6 +69,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/notifications', builder: (context, state) => const NotificationInboxScreen()),
       GoRoute(path: '/briefing', builder: (context, state) => const DailyBriefingScreen()),
       GoRoute(path: '/family-settings', builder: (context, state) => const FamilySettingsScreen()),
+      GoRoute(path: '/security', builder: (context, state) => const SecuritySettingsScreen()),
       GoRoute(
         path: '/task/:id',
         builder: (context, state) => TaskDetailScreen(task: state.extra as TaskModel),

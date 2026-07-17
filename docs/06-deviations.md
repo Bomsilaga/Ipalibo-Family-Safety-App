@@ -134,11 +134,16 @@ they run under the child's own RLS session. If a hosted-LLM upgrade is
 ever wanted, it must be proxied through an Edge Function that enforces
 the same scoping and must be a family-level opt-in in Settings.
 
-### Auth: phone sign-in, MFA, biometric gate, PIN login not yet wired
+### Auth: phone sign-in and MFA not yet wired; PIN/biometric gate done
 
-Email/password, Apple, and Google sign-in are implemented. Phone OTP,
-optional parent MFA, the biometric session gate, and child PIN login on
-shared devices (the `pin_hash` column and hashing exist in
-`create-child-account`) are follow-ups within Module 1's spec — none of
-them block the other modules and each needs provider/platform config
-(SMS provider for OTP, platform biometric APIs).
+Email/password, Apple, and Google sign-in are implemented. The device
+PIN gate (children on shared devices) and biometric unlock are now
+implemented as a local app lock (`core/auth/app_lock_service.dart` +
+`/lock` screen): salted-SHA-256 PIN in the platform keystore via
+flutter_secure_storage, biometrics via local_auth, engaged at cold start,
+with SOS reachable from the locked state. Note this is a *device-local*
+lock per the spec's intent ("PIN for children on shared devices" gating
+an already-valid session) — it is not the server-side `users.pin_hash`
+flow, which remains available for a future cross-device child sign-in.
+Still open: phone OTP (needs an SMS provider) and optional parent MFA
+(Supabase Auth MFA config) — both need provider setup a human does.
