@@ -22,6 +22,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   bool _isSignUp = false;
   bool _isSubmitting = false;
   String? _errorMessage;
+  String? _infoMessage;
 
   @override
   void dispose() {
@@ -35,15 +36,28 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     setState(() {
       _isSubmitting = true;
       _errorMessage = null;
+      _infoMessage = null;
     });
     final repo = ref.read(authRepositoryProvider);
     try {
       if (_isSignUp) {
-        await repo.signUpWithEmail(
+        final response = await repo.signUpWithEmail(
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
-        if (mounted) context.go('/family-setup');
+        // Supabase only returns an active session immediately when email
+        // confirmation is disabled on the project. Otherwise there is no
+        // signed-in user yet — proceeding to family setup here would hit
+        // "requires a signed-in user", so wait for the confirmation click.
+        if (response.session == null) {
+          setState(() {
+            _infoMessage =
+                'Check your email to confirm your account, then sign in below.';
+            _isSignUp = false;
+          });
+        } else if (mounted) {
+          context.go('/family-setup');
+        }
       } else {
         await repo.signInWithEmail(
           email: _emailController.text.trim(),
@@ -55,6 +69,29 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       setState(() => _errorMessage = e.toString());
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _oAuthSignIn({required bool isApple}) async {
+    setState(() {
+      _errorMessage = null;
+      _infoMessage = null;
+    });
+    try {
+      final repo = ref.read(authRepositoryProvider);
+      if (isApple) {
+        await repo.signInWithApple();
+      } else {
+        await repo.signInWithGoogle();
+      }
+    } catch (e) {
+      final providerName = isApple ? 'Apple' : 'Google';
+      final isNotEnabled = e.toString().contains('provider is not enabled');
+      setState(() {
+        _errorMessage = isNotEnabled
+            ? '$providerName sign-in isn\'t set up yet — use email instead.'
+            : 'Could not sign in with $providerName: $e';
+      });
     }
   }
 
@@ -104,6 +141,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   const SizedBox(height: AppSpacing.md),
                   Text(_errorMessage!, style: typography.small.copyWith(color: colors.danger)),
                 ],
+                if (_infoMessage != null) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  Text(_infoMessage!, style: typography.small.copyWith(color: colors.emerald700)),
+                ],
                 const SizedBox(height: AppSpacing.lg),
                 ElevatedButton(
                   onPressed: _isSubmitting ? null : _submit,
@@ -119,7 +160,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 TextButton(
                   onPressed: _isSubmitting
                       ? null
-                      : () => setState(() => _isSignUp = !_isSignUp),
+                      : () => setState(() {
+                            _isSignUp = !_isSignUp;
+                            _errorMessage = null;
+                            _infoMessage = null;
+                          }),
                   child: Text(
                     _isSignUp
                         ? 'Already have an account? Sign in'
@@ -137,17 +182,13 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 ]),
                 const SizedBox(height: AppSpacing.lg),
                 OutlinedButton.icon(
-                  onPressed: _isSubmitting
-                      ? null
-                      : () => ref.read(authRepositoryProvider).signInWithApple(),
+                  onPressed: _isSubmitting ? null : () => _oAuthSignIn(isApple: true),
                   icon: const Icon(Icons.apple),
                   label: const Text('Continue with Apple'),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 OutlinedButton.icon(
-                  onPressed: _isSubmitting
-                      ? null
-                      : () => ref.read(authRepositoryProvider).signInWithGoogle(),
+                  onPressed: _isSubmitting ? null : () => _oAuthSignIn(isApple: false),
                   icon: const Icon(Icons.g_mobiledata),
                   label: const Text('Continue with Google'),
                 ),
