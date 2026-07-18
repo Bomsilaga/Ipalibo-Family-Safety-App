@@ -22,17 +22,17 @@ class SupabaseConfig {
 ///
 /// Call from `main()` before `runApp`. All feature repositories read the
 /// client via [supabase], never by constructing their own.
-Future<void> initSupabase() async {
-  if (!SupabaseConfig.isConfigured) {
-    throw StateError(
-      'Supabase is not configured. Run with '
-      '--dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...',
-    );
-  }
+///
+/// Returns false (instead of throwing) when no credentials were provided
+/// via --dart-define, so a build without a backend — e.g. a preview web
+/// deploy — can show a friendly setup screen rather than crash on load.
+Future<bool> initSupabase() async {
+  if (!SupabaseConfig.isConfigured) return false;
   await Supabase.initialize(
     url: SupabaseConfig.url,
     anonKey: SupabaseConfig.anonKey,
   );
+  return true;
 }
 
 /// The shared Supabase client. Every feature repository calls this instead
