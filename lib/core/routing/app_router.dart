@@ -39,7 +39,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/splash',
     refreshListenable: RouterRefreshStream(authRepository.onAuthStateChange),
-    redirect: (context, state) {
+    redirect: (context, state) async {
       // App lock gate first — but SOS must stay reachable from a locked
       // state (product spec §11).
       if (isLocked && state.matchedLocation != '/lock' && state.matchedLocation != '/sos') {
@@ -49,9 +49,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final isSignedIn = authRepository.currentSession != null;
 
       // /splash is a transient landing spot only — it must always redirect
-      // onward (to /sign-in or /home below), never be a place a visitor
-      // can get stuck. Excluding it from goingToAuth previously left
-      // signed-out visitors stranded on the spinner forever.
+      // onward, never be a place a visitor can get stuck.
       if (state.matchedLocation == '/splash') {
         return isSignedIn ? '/home' : '/sign-in';
       }
@@ -59,8 +57,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final goingToAuth =
           state.matchedLocation == '/sign-in' || state.matchedLocation == '/family-setup';
 
-      if (!isSignedIn && !goingToAuth) return '/sign-in';
-      if (isSignedIn && state.matchedLocation == '/sign-in') return '/home';
+      if (!isSignedIn) {
+        return goingToAuth ? null : '/sign-in';
+      }
+
+      // A Supabase auth session alone isn't the full picture: the caller
+      // also needs a completed public.users row (created together with
+      // their family, or via accept-invite) before any family-scoped
+      // screen — calendar, tasks, chat, family — has anything to query.
+      // Without this check, a signed-in-but-not-onboarded user (e.g. one
+      // who confirmed their email and signed in directly, skipping the
+      // sign-up flow's redirect to /family-setup) landed on /home with no
+      // family at all, and every screen under it broke.
+      final hasProfile = await ref.read(currentAppUserProvider.future) != null;
+
+      if (!hasProfile) {
+        return state.matchedLocation == '/family-setup' ? null : '/family-setup';
+      }
+      if (goingToAuth) return '/home';
       return null;
     },
     routes: [
