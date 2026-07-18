@@ -47,12 +47,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       }
 
       final isSignedIn = authRepository.currentSession != null;
-      final goingToAuth = state.matchedLocation == '/sign-in' ||
-          state.matchedLocation == '/family-setup' ||
-          state.matchedLocation == '/splash';
+
+      // /splash is a transient landing spot only — it must always redirect
+      // onward (to /sign-in or /home below), never be a place a visitor
+      // can get stuck. Excluding it from goingToAuth previously left
+      // signed-out visitors stranded on the spinner forever.
+      if (state.matchedLocation == '/splash') {
+        return isSignedIn ? '/home' : '/sign-in';
+      }
+
+      final goingToAuth =
+          state.matchedLocation == '/sign-in' || state.matchedLocation == '/family-setup';
 
       if (!isSignedIn && !goingToAuth) return '/sign-in';
-      if (isSignedIn && state.matchedLocation == '/splash') return '/home';
       if (isSignedIn && state.matchedLocation == '/sign-in') return '/home';
       return null;
     },
