@@ -46,6 +46,27 @@ trusted_devices (
   device_fingerprint text not null,
   trusted_at timestamptz not null default now()
 )
+
+family_invites (
+  -- Added during Module 1 (Foundation) to back the "Family invitation" flow
+  -- in 01-product-spec.md §4: a parent invites by email/phone/link, the
+  -- invitee joins as Parent (co-parent) after acceptance. A direct client
+  -- INSERT into `users` for "join an existing family" is deliberately not
+  -- permitted by RLS (see 03-architecture.md) — acceptance must go through
+  -- a service-role Edge Function that validates the token first.
+  id uuid primary key default gen_random_uuid(),
+  family_id uuid references families(id),
+  invited_by uuid references users(id),
+  email text,
+  phone text,
+  role text not null default 'parent' check (role in ('parent','child')),
+  token_hash text not null,          -- hash of the one-time invite token, never store plaintext
+  status text not null default 'pending' check (status in ('pending','accepted','expired','revoked')),
+  expires_at timestamptz not null default (now() + interval '7 days'),
+  accepted_by uuid references users(id),
+  accepted_at timestamptz,
+  created_at timestamptz not null default now()
+)
 ```
 
 ## Calendar
