@@ -59,6 +59,21 @@ implemented** — confirm the pin still supports whatever Drift version is
 in use at that point, or find an environment where the GitHub download
 succeeds and drop the override.
 
+### RLS: SELECT policies on `families` and `users` must let a founder see their own not-yet-onboarded rows
+
+`current_family_id()` is `STABLE` and reads `public.users`, so it can't see
+a row that the *current* statement is still in the middle of inserting. The
+founding parent's flow — `insert into families ... returning` immediately
+followed by `insert into users ... returning` — hit this twice: PostgREST's
+`RETURNING` (used by every `.select()` call) checks the row against the
+table's SELECT policy, not just its INSERT `WITH CHECK`. Before the
+founder's `users` row exists, `current_family_id()` returns null, so
+`id = current_family_id()` fails on both tables even though the insert
+itself was permitted. Fixed by adding `families.created_by` (defaults to
+`auth.uid()`) and widening both SELECT policies to also match on
+"this is my own row" (`created_by = auth.uid()` / `id = auth.uid()`) —
+applied directly to the live project, documented in `02-data-model.md`.
+
 ## Modules 2–12 (full build pass)
 
 ### Chat: application-layer E2E encryption deferred
