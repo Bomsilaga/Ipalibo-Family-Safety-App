@@ -106,16 +106,28 @@ Supabase can technically read them. The repository (`chat_repository.dart`)
 carries a matching note. Design and implement the key scheme before any
 production launch.
 
-### GPS: reverse geocoding added; full map tile still blocked on a Google Maps API key
+### GPS: reverse geocoding added; map tile now wired in (one shared key, restrict per platform before shipping)
 
 Check-in and member tiles used to show raw lat/lng, which reads as broken
 to a non-technical user. Added `GpsRepository.reverseGeocode` (OpenStreetMap
 Nominatim, free, no API key) to turn coordinates into a place string
-("14 Smith St, Fitzroy") — this doesn't need any human setup. The full-bleed
-map view is unchanged and still blocked on a Google Maps API key per
-platform (see below); that's a genuinely separate capability (rendering an
-interactive map) from labelling a point, which reverse geocoding solves on
-its own.
+("14 Smith St, Fitzroy"). Separately, a Google Maps API key was provided
+and wired into all three platforms: `web/index.html` (Maps JS API script
+tag), `android/app/src/main/AndroidManifest.xml`
+(`com.google.android.geo.API_KEY` meta-data), and
+`ios/Runner/AppDelegate.swift` (`GMSServices.provideAPIKey`) — the Family
+and Places tabs in `gps_screen.dart` now render an actual `GoogleMap` with
+member markers / safe-zone circles above the list, not just coordinates.
+
+**Same key value on all three platforms is a placeholder, not the end
+state.** Google Cloud Console restricts a Maps key by exactly one
+mechanism — HTTP referrer (web) *or* Android package+SHA-1 *or* iOS bundle
+ID — so one key cannot be properly restricted for all three at once. Before
+shipping to app stores: mint separate keys per platform in Cloud Console,
+restrict each to its platform, and swap the Android/iOS values. The web key
+should be restricted to `ipalibos.vercel.app` and
+`ipalibo-family-safety-app.vercel.app` — a human task in Cloud Console this
+repo can't do on its own.
 
 ### GPS: foreground check-in only; background tracking blocked on entitlements
 

@@ -31,6 +31,16 @@
 
   <title>The Ipalibos</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    Google Maps JS API for the Live Location map tile (docs/06-deviations.md
+    "GPS: reverse geocoding added; full map tile still blocked on a Google
+    Maps API key" — key now provided). This key is meant to be
+    client-embedded: Google secures it via HTTP-referrer restriction in
+    Cloud Console, not secrecy. Restrict it to this app's domains
+    (ipalibos.vercel.app, ipalibo-family-safety-app.vercel.app) there.
+  -->
+  <script defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCVIrqz2CResntrolbXTUXl7c9jj8BJb-8"></script>
 </head>
 <body>
   <!--
