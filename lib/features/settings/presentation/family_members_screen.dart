@@ -143,7 +143,7 @@ class FamilyMembersScreen extends ConsumerWidget {
         content: TextField(
           controller: emailController,
           keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(hintText: 'Their email (optional)'),
+          decoration: const InputDecoration(hintText: 'Their email'),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -151,7 +151,9 @@ class FamilyMembersScreen extends ConsumerWidget {
         ],
       ),
     );
-    if (proceed != true || !context.mounted) return;
+    // family_invites requires an email or phone on the row (there's no
+    // delivery mechanism yet, but it's how a parent tells invites apart).
+    if (proceed != true || emailController.text.trim().isEmpty || !context.mounted) return;
     try {
       final code = await ref.read(familyInviteRepositoryProvider).createInvite(
             familyId: me.familyId!,
