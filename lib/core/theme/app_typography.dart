@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// Type scale for The Ipalibos, per docs/04-design-system.md.
 ///
 /// Primary (body/UI): Inter · Secondary (display/headings): Fraunces ·
-/// Monospace (data/timestamps): IBM Plex Mono.
-///
-/// Font files are not bundled yet — family names are declared here so they
-/// resolve once added under `assets/fonts/` and registered in pubspec.yaml;
-/// until then Flutter falls back to the platform default.
+/// Monospace (data/timestamps): IBM Plex Mono. Loaded via google_fonts
+/// (fetched once and cached — no font files to bundle/maintain) rather
+/// than declared-but-unbundled family name strings, which silently fall
+/// back to the platform default and is why the app read as generic.
 @immutable
 class AppTypography extends ThemeExtension<AppTypography> {
   const AppTypography({
@@ -32,61 +32,48 @@ class AppTypography extends ThemeExtension<AppTypography> {
   final TextStyle caption; // 12 - Inter
   final TextStyle mono; // IBM Plex Mono, for timestamps/codes
 
-  static const _primaryFamily = 'Inter';
-  static const _displayFamily = 'Fraunces';
-  static const _monoFamily = 'IBMPlexMono';
-
-  static const standard = AppTypography(
-    display: TextStyle(
-      fontFamily: _displayFamily,
+  static final standard = AppTypography(
+    display: GoogleFonts.fraunces(
       fontSize: 56,
       fontWeight: FontWeight.w600,
       height: 1.1,
     ),
-    headline: TextStyle(
-      fontFamily: _displayFamily,
+    headline: GoogleFonts.fraunces(
       fontSize: 40,
       fontWeight: FontWeight.w600,
       height: 1.15,
     ),
-    title: TextStyle(
-      fontFamily: _primaryFamily,
+    title: GoogleFonts.inter(
       fontSize: 28,
       fontWeight: FontWeight.w600,
       height: 1.2,
     ),
-    subtitle: TextStyle(
-      fontFamily: _primaryFamily,
+    subtitle: GoogleFonts.inter(
       fontSize: 22,
       fontWeight: FontWeight.w600,
       height: 1.25,
     ),
-    bodyLarge: TextStyle(
-      fontFamily: _primaryFamily,
+    bodyLarge: GoogleFonts.inter(
       fontSize: 18,
       fontWeight: FontWeight.w400,
       height: 1.4,
     ),
-    body: TextStyle(
-      fontFamily: _primaryFamily,
+    body: GoogleFonts.inter(
       fontSize: 16,
       fontWeight: FontWeight.w400,
       height: 1.4,
     ),
-    small: TextStyle(
-      fontFamily: _primaryFamily,
+    small: GoogleFonts.inter(
       fontSize: 14,
       fontWeight: FontWeight.w400,
       height: 1.35,
     ),
-    caption: TextStyle(
-      fontFamily: _primaryFamily,
+    caption: GoogleFonts.inter(
       fontSize: 12,
       fontWeight: FontWeight.w400,
       height: 1.3,
     ),
-    mono: TextStyle(
-      fontFamily: _monoFamily,
+    mono: GoogleFonts.ibmPlexMono(
       fontSize: 14,
       fontWeight: FontWeight.w500,
       height: 1.3,

@@ -48,6 +48,7 @@ dependencies:
   record: ^7.1.1
   local_auth: ^3.0.2
   crypto: ^3.0.7
+  google_fonts: ^8.2.0
 
 dev_dependencies:
   flutter_test:
