@@ -5,11 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/auth/app_user.dart';
 import '../../../core/auth/auth_providers.dart';
 import '../../../core/auth/permissions.dart';
+import '../../../core/auth/user_role.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../widgets/empty_state.dart';
 import '../../../widgets/member_avatar.dart';
 import '../data/family_invite_repository.dart';
+import 'child_profile_actions.dart';
 
 /// Bottom-nav "Family" tab: family members and roles
 /// (docs/01-product-spec.md §15 "Family settings (Parent-only): manage
@@ -64,6 +66,11 @@ class FamilyMembersScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     Text('Other members', style: typography.small.copyWith(color: colors.gray[6])),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Tap a member to switch this device to their profile.',
+                      style: typography.caption.copyWith(color: colors.gray[5]),
+                    ),
                     const SizedBox(height: AppSpacing.sm),
                     Expanded(
                       child: membersAsync.when(
@@ -84,6 +91,8 @@ class FamilyMembersScreen extends ConsumerWidget {
                                     leading: MemberAvatar(user: m),
                                     title: Text(m.displayName),
                                     subtitle: Text(m.role.toStringValue()),
+                                    trailing: const Icon(Icons.chevron_right),
+                                    onTap: () => _openMemberOptions(context, ref, user, m),
                                   ),
                                 ),
                             ],
@@ -98,6 +107,50 @@ class FamilyMembersScreen extends ConsumerWidget {
               ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => EmptyState(icon: Icons.error_outline, message: '$error'),
+      ),
+    );
+  }
+
+  Future<void> _openMemberOptions(BuildContext context, WidgetRef ref, AppUser me, AppUser member) async {
+    final isParentViewer = me.role == UserRole.parent;
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: MemberAvatar(user: member),
+              title: Text(member.displayName),
+              subtitle: Text(member.role.toStringValue()),
+            ),
+            const Divider(height: 1),
+            if (member.role == UserRole.child) ...[
+              ListTile(
+                leading: const Icon(Icons.switch_account_outlined),
+                title: const Text('Switch to this profile'),
+                subtitle: const Text('Hand the device to them — asks for their PIN'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  signInAsChildFlow(context, ref, member);
+                },
+              ),
+              if (isParentViewer)
+                ListTile(
+                  leading: const Icon(Icons.password_outlined),
+                  title: const Text('Set / reset PIN'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setChildPinFlow(context, ref, member);
+                  },
+                ),
+            ] else
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Text('Co-parent — role management coming soon.'),
+              ),
+          ],
+        ),
       ),
     );
   }

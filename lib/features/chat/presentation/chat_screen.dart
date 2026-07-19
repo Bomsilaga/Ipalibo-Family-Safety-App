@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/app_user.dart';
 import '../../../core/auth/auth_providers.dart';
@@ -8,6 +9,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../widgets/empty_state.dart';
 import '../../../widgets/member_avatar.dart';
+import '../data/calls_repository.dart';
 import '../data/chat_repository.dart';
 import '../domain/message_model.dart';
 
@@ -63,6 +65,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  Future<void> _startCall(BuildContext context, String chatId, String type) async {
+    try {
+      final call = await ref.read(callsRepositoryProvider).startCall(chatId: chatId, type: type);
+      if (context.mounted) {
+        context.push('/call/${call.id}?roomUrl=${Uri.encodeComponent(call.roomUrl)}');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not start call: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
@@ -70,7 +85,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     return Scaffold(
       backgroundColor: colors.ivory,
-      appBar: AppBar(title: const Text('Family Chat')),
+      appBar: AppBar(
+        title: const Text('Family Chat'),
+        actions: chatIdAsync.maybeWhen(
+          data: (chatId) => chatId == null
+              ? const []
+              : [
+                  IconButton(
+                    icon: const Icon(Icons.call_outlined),
+                    tooltip: 'Voice call',
+                    onPressed: () => _startCall(context, chatId, 'audio'),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.videocam_outlined),
+                    tooltip: 'Video call',
+                    onPressed: () => _startCall(context, chatId, 'video'),
+                  ),
+                ],
+          orElse: () => const [],
+        ),
+      ),
       body: chatIdAsync.when(
         data: (chatId) {
           if (chatId == null) {

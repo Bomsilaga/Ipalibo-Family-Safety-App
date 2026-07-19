@@ -1,20 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/chat/data/calls_repository.dart';
+import '../../features/chat/domain/call_model.dart';
+import '../../features/chat/presentation/call_screen.dart';
+import '../auth/app_user.dart';
+import '../auth/auth_providers.dart';
 import '../theme/app_theme.dart';
 
 /// Bottom tab bar shell: Home · Calendar · Tasks · Chat · Family · More
-/// (docs/04-design-system.md "Mobile navigation").
-class AppShell extends StatelessWidget {
+/// (docs/04-design-system.md "Mobile navigation"). Also owns the
+/// family-wide incoming-call banner — calls are family-scoped, not
+/// chat-scoped, so this listens regardless of which tab is open.
+class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.appColors;
+    final me = ref.watch(currentAppUserProvider).value;
+
     return Scaffold(
-      body: navigationShell,
+      body: Column(
+        children: [
+          if (me?.familyId != null) _IncomingCallListener(familyId: me!.familyId!, me: me),
+          Expanded(child: navigationShell),
+        ],
+      ),
       // Long-press anywhere on the tab bar = fast SOS entry, reachable in
       // one motion from any tab (docs/04-design-system.md "Mobile
       // navigation").
@@ -54,6 +69,36 @@ class AppShell extends StatelessWidget {
           unselectedItemColor: colors.gray[5],
         ),
       ),
+    );
+  }
+}
+
+class _IncomingCallListener extends ConsumerWidget {
+  const _IncomingCallListener({required this.familyId, required this.me});
+
+  final String familyId;
+  final AppUser me;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final membersAsync = ref.watch(familyMembersProvider);
+    return StreamBuilder<List<CallModel>>(
+      stream: ref.watch(callsRepositoryProvider).callsStream(familyId),
+      builder: (context, snapshot) {
+        final calls = snapshot.data ?? const <CallModel>[];
+        final ringing = calls.where((c) => c.isRinging && c.createdBy != me.id).toList();
+        if (ringing.isEmpty) return const SizedBox();
+        final call = ringing.first;
+        final members = membersAsync.value ?? const <AppUser>[];
+        final callerMatches = members.where((m) => m.id == call.createdBy);
+        final callerName = callerMatches.isNotEmpty ? callerMatches.first.displayName : 'Someone';
+        return IncomingCallBanner(
+          callId: call.id,
+          roomUrl: call.roomUrl,
+          callerName: callerName,
+          isVideo: call.isVideo,
+        );
+      },
     );
   }
 }

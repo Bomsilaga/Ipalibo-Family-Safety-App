@@ -106,6 +106,29 @@ Supabase can technically read them. The repository (`chat_repository.dart`)
 carries a matching note. Design and implement the key scheme before any
 production launch.
 
+### Chat: voice/video calls via Daily.co (encrypted in transit, not E2E)
+
+Added `public.calls` (family-scoped, Realtime-enabled so every device sees
+a new call the instant it's created — that's the "incoming call" signal)
+and two Edge Functions: `start-call` creates a Daily.co room server-side
+(the Daily API key lives in Supabase Vault, read through the
+service-role-only `public.get_secret()` RPC — never reaches the client)
+and inserts the `calls` row; `end-call` tears the room down and marks it
+ended. On web, `CallScreen` embeds the room directly as an iframe — Daily's
+own room page is already a complete call UI (video, audio, mute, screen
+share), so that's the entire client integration, no Daily SDK needed.
+Native iOS/Android builds currently show a placeholder
+(`call_view_stub.dart`): Daily's Flutter SDK talks to native platform
+WebRTC bindings, not a web view, so mobile needs that SDK added as a
+follow-up before calls work outside the web app.
+
+Calls are encrypted in transit (standard WebRTC SRTP/DTLS, same guarantee
+Daily gives every room) but not end-to-end — Daily's infrastructure can
+technically access media the same way Supabase can technically read chat
+message bodies today. True E2E for calls would need Daily's E2EE mode
+(still routes through their SFU, adds client-side key exchange) and is a
+separate scope decision from the E2E chat encryption above — not done here.
+
 ### GPS: reverse geocoding added; map tile now wired in (one shared key, restrict per platform before shipping)
 
 Check-in and member tiles used to show raw lat/lng, which reads as broken
