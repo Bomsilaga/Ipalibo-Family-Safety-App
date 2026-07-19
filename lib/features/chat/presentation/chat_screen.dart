@@ -39,9 +39,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // typed text must still be sitting in the box afterwards rather than
     // silently vanishing with nothing sent and no error shown.
     if (text.isEmpty || _sending) return;
-    final me = await ref.read(currentAppUserProvider.future);
-    if (me == null) return;
+    // Set the guard synchronously, before the first await, so two calls
+    // fired in the same frame (double Enter, Enter racing the send
+    // button) can't both slip past the _sending check before either one
+    // sets it — that gap used to let a single tap send the message twice.
     setState(() => _sending = true);
+    final me = await ref.read(currentAppUserProvider.future);
+    if (me == null) {
+      setState(() => _sending = false);
+      return;
+    }
     try {
       await ref.read(chatRepositoryProvider).sendText(chatId: chatId, senderId: me.id, body: text);
       _inputController.clear();

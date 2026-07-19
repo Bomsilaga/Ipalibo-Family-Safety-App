@@ -20,6 +20,7 @@ import '../../features/settings/presentation/family_members_screen.dart';
 import '../../features/settings/presentation/family_settings_screen.dart';
 import '../../features/settings/presentation/more_screen.dart';
 import '../../features/settings/presentation/security_settings_screen.dart';
+import '../../features/settings/presentation/switch_profile_screen.dart';
 import '../../features/sos/presentation/sos_screen.dart';
 import '../../features/tasks/domain/task_model.dart';
 import '../../features/tasks/presentation/task_completed_screen.dart';
@@ -91,6 +92,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/briefing', builder: (context, state) => const DailyBriefingScreen()),
       GoRoute(path: '/family-settings', builder: (context, state) => const FamilySettingsScreen()),
       GoRoute(path: '/security', builder: (context, state) => const SecuritySettingsScreen()),
+      GoRoute(path: '/switch-profile', builder: (context, state) => const SwitchProfileScreen()),
       GoRoute(
         path: '/task/:id',
         builder: (context, state) => TaskDetailScreen(task: state.extra as TaskModel),

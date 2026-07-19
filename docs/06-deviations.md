@@ -213,6 +213,34 @@ they run under the child's own RLS session. If a hosted-LLM upgrade is
 ever wanted, it must be proxied through an Edge Function that enforces
 the same scoping and must be a family-level opt-in in Settings.
 
+### Auth: child PIN sign-in implemented (real session, not a UI-only switch)
+
+"Chat from one user doesn't appear in the central chat" turned out not to
+be a chat bug: neither child account had ever sent a message, because
+there was no way for a child to sign in at all. Children have no
+email/password by design (docs/01-product-spec.md §4 — they authenticate
+via PIN/biometric against "an already-registered family device session"),
+but that PIN flow was never built; `app_lock_service.dart` only gates
+re-opening an *already signed-in* session, it doesn't switch identity.
+
+Implemented properly rather than faked client-side: a child tapped in
+`/switch-profile` doesn't just flip a local "active profile" flag while
+the device stays authenticated as whoever signed in last — that would
+make every RLS check (`sender_id = auth.uid()`, etc.) still see the
+parent, not the child. Instead the new `child-sign-in` Edge Function
+verifies the PIN server-side against `pin_hash`, then mints a one-time
+Supabase magic-link token for the child's own auth identity via the Admin
+API (`generateLink`); the client redeems it with
+`supabase.auth.verifyOTP(type: magiclink, tokenHash: ...)`, which
+installs a real session for the child. No password, no email sent to
+anyone — magic-link is reused purely as Supabase's supported mechanism
+for minting a session for a user that has none.
+
+`AuthRepository.setChildPin` (parent-only, enforced by existing RLS)
+hashes and stores the PIN; a "Set PIN" action was added next to each
+child in `/switch-profile` since PIN entry wasn't previously exposed
+anywhere post-creation.
+
 ### Auth: phone sign-in and MFA not yet wired; PIN/biometric gate done
 
 Email/password, Apple, and Google sign-in are implemented. The device

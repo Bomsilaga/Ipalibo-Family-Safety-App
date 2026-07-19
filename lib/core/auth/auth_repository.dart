@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../network/supabase_client.dart';
@@ -154,5 +157,36 @@ class AuthRepository {
   /// if it would leave the family with zero parents.
   Future<void> setRole({required String userId, required UserRole role}) async {
     await _client.from('users').update({'role': role.toStringValue()}).eq('id', userId);
+  }
+
+  /// A parent sets/resets a child's device PIN. Plain SHA-256 (no salt,
+  /// matching the scheme create-child-account/child-sign-in already use)
+  /// — hashed client-side so the PIN itself is never sent as a bare update
+  /// value, and verified server-side in the child-sign-in Edge Function.
+  Future<void> setChildPin({required String childId, required String pin}) async {
+    final hash = sha256.convert(utf8.encode(pin)).toString();
+    await _client.from('users').update({'pin_hash': hash}).eq('id', childId);
+  }
+
+  /// "PIN/biometric against an already-registered family device session"
+  /// (docs/01-product-spec.md §4): the device is already authenticated as
+  /// some family member (the caller here). The child-sign-in Edge Function
+  /// verifies the PIN server-side and mints a one-time magic-link token
+  /// for the child's own auth identity; redeeming it here replaces the
+  /// device's active session with the child's, so every RLS check
+  /// (`sender_id = auth.uid()`, etc.) sees the child as themselves from
+  /// this point on — not a client-side "pretend" switch.
+  Future<void> signInAsChild({required String childId, required String pin}) async {
+    final response = await _client.functions.invoke(
+      'child-sign-in',
+      body: {'child_id': childId, 'pin': pin},
+    );
+    if (response.status != 200) {
+      final data = response.data;
+      final message = data is Map && data['error'] != null ? '${data['error']}' : 'Could not sign in (${response.status}).';
+      throw StateError(message);
+    }
+    final hashedToken = (response.data as Map)['hashed_token'] as String;
+    await _client.auth.verifyOTP(type: OtpType.magiclink, tokenHash: hashedToken);
   }
 }

@@ -25,6 +25,7 @@ class MoreScreen extends ConsumerWidget {
       _MoreItem('Notifications', Icons.notifications_none_outlined, '/notifications'),
       _MoreItem('Family Settings', Icons.settings_outlined, '/family-settings'),
       _MoreItem('Security & App Lock', Icons.fingerprint, '/security'),
+      _MoreItem('Switch Profile', Icons.switch_account_outlined, '/switch-profile'),
     ];
 
     return Scaffold(
