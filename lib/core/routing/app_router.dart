@@ -9,6 +9,7 @@ import '../auth/presentation/sign_in_screen.dart';
 import '../auth/presentation/splash_screen.dart';
 import '../../features/ai_assistant/presentation/daily_briefing_screen.dart';
 import '../../features/calendar/presentation/calendar_screen.dart';
+import '../../features/chat/presentation/call_screen.dart';
 import '../../features/chat/presentation/chat_screen.dart';
 import '../../features/gps/presentation/gps_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
@@ -93,6 +94,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/family-settings', builder: (context, state) => const FamilySettingsScreen()),
       GoRoute(path: '/security', builder: (context, state) => const SecuritySettingsScreen()),
       GoRoute(path: '/switch-profile', builder: (context, state) => const SwitchProfileScreen()),
+      GoRoute(
+        path: '/call/:callId',
+        builder: (context, state) => CallScreen(
+          callId: state.pathParameters['callId']!,
+          roomUrl: state.uri.queryParameters['roomUrl']!,
+        ),
+      ),
       GoRoute(
         path: '/task/:id',
         builder: (context, state) => TaskDetailScreen(task: state.extra as TaskModel),

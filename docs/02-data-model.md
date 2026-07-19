@@ -284,6 +284,19 @@ message_receipts (
   read_at timestamptz,
   primary key (message_id, user_id)
 )
+
+calls (                              -- voice/video via Daily.co (docs/06-deviations.md)
+  id uuid primary key default gen_random_uuid(),
+  family_id uuid references families(id),
+  chat_id uuid references chats(id),
+  room_name text not null,
+  room_url text not null,
+  type text not null default 'video' check (type in ('audio','video')),
+  status text not null default 'ringing' check (status in ('ringing','active','ended','declined')),
+  created_by uuid references users(id),
+  created_at timestamptz not null default now(),
+  ended_at timestamptz
+)
 ```
 
 ## GPS Safety
