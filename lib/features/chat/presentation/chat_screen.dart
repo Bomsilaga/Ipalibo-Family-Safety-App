@@ -197,16 +197,16 @@ class _ChatBody extends ConsumerWidget {
     };
     final me = meAsync.value;
 
+    final messagesAsync = ref.watch(chatMessagesProvider(chatId));
+
     return Column(
       children: [
         Expanded(
-          child: StreamBuilder<List<MessageModel>>(
-            stream: ref.watch(chatRepositoryProvider).messageStream(chatId),
-            builder: (context, snapshot) {
-              final messages = snapshot.data ?? const <MessageModel>[];
-              if (snapshot.connectionState == ConnectionState.waiting && messages.isEmpty) {
-                return const Center(child: CircularProgressIndicator());
-              }
+          child: messagesAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, _) =>
+                EmptyState(icon: Icons.error_outline, message: 'Could not load messages: $error'),
+            data: (messages) {
               if (messages.isEmpty) {
                 return const EmptyState(
                   icon: Icons.waving_hand_outlined,
