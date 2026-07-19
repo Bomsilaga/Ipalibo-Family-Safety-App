@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/auth/app_user.dart';
 import '../../../core/auth/auth_providers.dart';
@@ -26,6 +27,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   bool _sending = false;
+  bool _uploadingImage = false;
 
   @override
   void dispose() {
@@ -62,6 +64,41 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     } finally {
       if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _pickAndSendImage(String chatId) async {
+    if (_uploadingImage) return;
+    final me = await ref.read(currentAppUserProvider.future);
+    if (me == null || me.familyId == null) return;
+    final XFile? picked;
+    try {
+      picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not open photo picker: $e')));
+      }
+      return;
+    }
+    if (picked == null) return;
+    setState(() => _uploadingImage = true);
+    try {
+      final bytes = await picked.readAsBytes();
+      final ext = picked.name.contains('.') ? picked.name.split('.').last.toLowerCase() : 'jpg';
+      final path = await ref.read(chatRepositoryProvider).uploadChatImage(
+            familyId: me.familyId!,
+            chatId: chatId,
+            bytes: bytes,
+            fileExt: ext,
+            contentType: picked.mimeType,
+          );
+      await ref.read(chatRepositoryProvider).sendImage(chatId: chatId, senderId: me.id, storagePath: path);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Photo not sent: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingImage = false);
     }
   }
 
@@ -118,7 +155,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             inputController: _inputController,
             scrollController: _scrollController,
             sending: _sending,
+            uploadingImage: _uploadingImage,
             onSend: () => _send(chatId),
+            onAttachImage: () => _pickAndSendImage(chatId),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -135,14 +174,18 @@ class _ChatBody extends ConsumerWidget {
     required this.inputController,
     required this.scrollController,
     required this.sending,
+    required this.uploadingImage,
     required this.onSend,
+    required this.onAttachImage,
   });
 
   final String chatId;
   final TextEditingController inputController;
   final ScrollController scrollController;
   final bool sending;
+  final bool uploadingImage;
   final VoidCallback onSend;
+  final VoidCallback onAttachImage;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -200,6 +243,17 @@ class _ChatBody extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
             child: Row(
               children: [
+                IconButton(
+                  icon: uploadingImage
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.attach_file),
+                  tooltip: 'Attach a photo',
+                  onPressed: uploadingImage ? null : onAttachImage,
+                ),
                 Expanded(
                   child: TextField(
                     controller: inputController,
@@ -230,7 +284,7 @@ class _ChatBody extends ConsumerWidget {
   }
 }
 
-class _MessageBubble extends StatelessWidget {
+class _MessageBubble extends ConsumerWidget {
   const _MessageBubble({
     required this.message,
     required this.sender,
@@ -246,7 +300,7 @@ class _MessageBubble extends StatelessWidget {
   final VoidCallback onDelete;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.appColors;
     final typography = context.appTypography;
 
@@ -313,13 +367,21 @@ class _MessageBubble extends StatelessWidget {
                       Text(sender!.displayName,
                           style: typography.caption
                               .copyWith(color: accent, fontWeight: FontWeight.w600)),
-                    Text(
-                      message.isDeleted ? 'Message removed' : (message.body ?? ''),
-                      style: typography.body.copyWith(
-                        color: isMine ? colors.ivory : null,
-                        fontStyle: message.isDeleted ? FontStyle.italic : null,
+                    if (message.isDeleted)
+                      Text(
+                        'Message removed',
+                        style: typography.body.copyWith(
+                          color: isMine ? colors.ivory : null,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      )
+                    else if (message.type == 'image' && message.mediaUrl != null)
+                      _ImageAttachment(storagePath: message.mediaUrl!, caption: message.body)
+                    else
+                      Text(
+                        message.body ?? '',
+                        style: typography.body.copyWith(color: isMine ? colors.ivory : null),
                       ),
-                    ),
                     Text(time,
                         style: typography.caption.copyWith(
                             color: isMine ? colors.ivory.withValues(alpha: 0.7) : colors.gray[5])),
@@ -330,6 +392,71 @@ class _MessageBubble extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The `chat-media` bucket is private (family-privacy requirement, per
+/// CLAUDE.md), so every render needs a freshly signed URL rather than a
+/// stored public one.
+class _ImageAttachment extends ConsumerWidget {
+  const _ImageAttachment({required this.storagePath, this.caption});
+
+  final String storagePath;
+  final String? caption;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final typography = context.appTypography;
+    return FutureBuilder<String>(
+      future: ref.read(chatRepositoryProvider).signedUrlForPath(storagePath),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const SizedBox(
+            width: 160,
+            height: 160,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          );
+        }
+        if (snapshot.hasError) {
+          return const SizedBox(
+            width: 160,
+            height: 80,
+            child: Center(child: Icon(Icons.broken_image_outlined)),
+          );
+        }
+        final url = snapshot.data!;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            GestureDetector(
+              onTap: () => showDialog<void>(
+                context: context,
+                builder: (ctx) => Dialog(
+                  backgroundColor: Colors.black,
+                  insetPadding: const EdgeInsets.all(AppSpacing.sm),
+                  child: InteractiveViewer(child: Image.network(url)),
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppSpacing.radiusSmall),
+                child: Image.network(
+                  url,
+                  width: 200,
+                  fit: BoxFit.cover,
+                  loadingBuilder: (context, child, progress) =>
+                      progress == null ? child : const SizedBox(width: 200, height: 200),
+                ),
+              ),
+            ),
+            if (caption != null && caption!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xs),
+                child: Text(caption!, style: typography.body),
+              ),
+          ],
+        );
+      },
     );
   }
 }

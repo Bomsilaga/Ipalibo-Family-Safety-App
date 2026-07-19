@@ -129,6 +129,26 @@ message bodies today. True E2E for calls would need Daily's E2EE mode
 (still routes through their SFU, adds client-side key exchange) and is a
 separate scope decision from the E2E chat encryption above — not done here.
 
+### Chat: image attachments via a private Supabase Storage bucket
+
+Added the `chat-media` Storage bucket (private, not `public: true`) with
+RLS mirroring the family-scoping pattern used everywhere else: objects
+are keyed `{family_id}/{chat_id}/{timestamp}.{ext}`, and
+`storage.foldername(name)[1] = current_family_id()` gates read/write, so
+one family's photos are never reachable by another family's session —
+same child-privacy/data-minimisation bar as the rest of the schema.
+
+Because the bucket is private, `messages.media_url` stores the *storage
+path*, not a public URL — every read (each image bubble) calls
+`createSignedUrl` for a fresh 1-hour-expiry link via
+`ChatRepository.signedUrlForPath`, rather than persisting a URL that
+would eventually 403. Upload goes through `image_picker` (already a
+dependency; works on web via its web plugin) → `uploadBinary` → insert a
+`messages` row with `type: 'image'`. Tapping a thumbnail opens a
+full-screen `InteractiveViewer`. Video/voice/document attachment types
+that the `messages.type` check-constraint already allows are not built —
+only images, since that's what was actually requested.
+
 ### GPS: reverse geocoding added; map tile now wired in (one shared key, restrict per platform before shipping)
 
 Check-in and member tiles used to show raw lat/lng, which reads as broken
