@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
 import 'app_spacing.dart';
@@ -26,12 +27,18 @@ class AppTheme {
       surface: brightness == Brightness.light ? colors.white : colors.white,
     );
 
+    // Base every text style on Inter (not just the ones we explicitly set
+    // below) so unstyled Material widgets — dialogs, menus, tooltips —
+    // don't silently fall back to the platform default font.
+    final baseTextTheme = GoogleFonts.interTextTheme(
+      brightness == Brightness.light ? ThemeData.light().textTheme : ThemeData.dark().textTheme,
+    );
+
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: colors.ivory,
-      fontFamily: 'Inter',
       extensions: [colors, typography, spacing],
       appBarTheme: AppBarTheme(
         backgroundColor: colors.emerald900,
@@ -39,7 +46,7 @@ class AppTheme {
         elevation: AppSpacing.elevations[0],
         titleTextStyle: typography.title.copyWith(color: colors.white),
       ),
-      textTheme: TextTheme(
+      textTheme: baseTextTheme.copyWith(
         displayLarge: typography.display.copyWith(color: colors.emerald900),
         headlineLarge: typography.headline.copyWith(color: colors.emerald900),
         titleLarge: typography.title,
