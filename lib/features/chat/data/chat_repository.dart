@@ -30,11 +30,16 @@ class ChatRepository {
   }
 
   Stream<List<MessageModel>> messageStream(String chatId) {
+    // SupabaseStreamBuilder.order() defaults to ascending: false (unlike
+    // the regular query builder), so an unqualified .order('created_at')
+    // silently sorted newest-first — new messages rendered at the top of
+    // the list while the UI auto-scrolls to the bottom, making every send
+    // look like it vanished. Must be explicit here.
     return _client
         .from('messages')
         .stream(primaryKey: ['id'])
         .eq('chat_id', chatId)
-        .order('created_at')
+        .order('created_at', ascending: true)
         .map((rows) => rows.map(MessageModel.fromJson).toList());
   }
 
