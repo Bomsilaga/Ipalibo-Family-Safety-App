@@ -129,6 +129,27 @@ message bodies today. True E2E for calls would need Daily's E2EE mode
 (still routes through their SFU, adds client-side key exchange) and is a
 separate scope decision from the E2E chat encryption above — not done here.
 
+**Redone for real multi-party behaviour** after the first pass shipped
+with three bugs: (1) every tap of the call button created a brand new
+Daily room, so a second family member joining a "call in progress"
+actually ended up alone in their own disconnected room — `startCall` now
+looks for an existing `ringing`/`active` call on the chat and returns
+that one instead of always minting a fresh room; (2) nothing ever moved
+a call's status off `ringing`, so the "X is calling…" banner (and the
+call screen itself) said "calling" forever even once someone had
+answered — `CallsRepository.markActive` flips it to `active` the moment
+a *second* device (not the creator's own screen) opens the call; (3) an
+open `CallScreen` had no way to learn a call had ended elsewhere, so
+hanging up on one device left every other device sitting on a dead Daily
+room — it now watches the call row live (`watchCall`) and closes itself
+the instant the row flips to `ended`. Declining an incoming call is now
+purely local (`dismissedCallsProvider`, a per-device set) rather than
+calling `endCall` — a decline used to end the call for the caller and
+everyone else too, backwards from how a group call should behave; only
+explicitly hanging up (the X button, or the caller ending it) tears the
+whole call down, matching the "any family member can end a call"
+model the `end-call` function already implements server-side.
+
 ### Chat: image attachments via a private Supabase Storage bucket
 
 Added the `chat-media` Storage bucket (private, not `public: true`) with

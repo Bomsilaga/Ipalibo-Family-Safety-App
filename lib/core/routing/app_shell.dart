@@ -82,13 +82,20 @@ class _IncomingCallListener extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final membersAsync = ref.watch(familyMembersProvider);
+    final dismissed = ref.watch(dismissedCallsProvider);
     return StreamBuilder<List<CallModel>>(
       stream: ref.watch(callsRepositoryProvider).callsStream(familyId),
       builder: (context, snapshot) {
         final calls = snapshot.data ?? const <CallModel>[];
-        final ringing = calls.where((c) => c.isRinging && c.createdBy != me.id).toList();
-        if (ringing.isEmpty) return const SizedBox();
-        final call = ringing.first;
+        // isJoinable (ringing OR active) rather than just ringing: a
+        // group call already in progress should still be joinable by
+        // family members who weren't there when it started, same as
+        // WhatsApp group calls.
+        final joinable = calls
+            .where((c) => c.isJoinable && c.createdBy != me.id && !dismissed.contains(c.id))
+            .toList();
+        if (joinable.isEmpty) return const SizedBox();
+        final call = joinable.first;
         final members = membersAsync.value ?? const <AppUser>[];
         final callerMatches = members.where((m) => m.id == call.createdBy);
         final callerName = callerMatches.isNotEmpty ? callerMatches.first.displayName : 'Someone';
@@ -97,6 +104,7 @@ class _IncomingCallListener extends ConsumerWidget {
           roomUrl: call.roomUrl,
           callerName: callerName,
           isVideo: call.isVideo,
+          isActive: call.isActive,
         );
       },
     );

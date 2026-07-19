@@ -25,6 +25,9 @@ class CallModel {
   final DateTime? endedAt;
 
   bool get isRinging => status == 'ringing';
+  bool get isActive => status == 'active';
+  bool get isEnded => status == 'ended' || status == 'declined';
+  bool get isJoinable => isRinging || isActive;
   bool get isVideo => type == 'video';
 
   factory CallModel.fromJson(Map<String, dynamic> json) => CallModel(

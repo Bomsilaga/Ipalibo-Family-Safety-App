@@ -142,3 +142,15 @@ final chatRepositoryProvider = Provider<ChatRepository>((ref) {
 final familyChatIdProvider = FutureProvider<String?>((ref) async {
   return ref.watch(chatRepositoryProvider).familyGroupChatId();
 });
+
+/// Cached per chatId so the chat screen keeps exactly one live
+/// subscription regardless of how many times it rebuilds (typing,
+/// sending, uploading all trigger rebuilds). Calling `.stream()` fresh on
+/// every build — the previous approach — opened a new Realtime channel
+/// each time; the brief overlap between the old channel's last delivery
+/// and the new one's first delivery is what showed a just-sent message
+/// twice for an instant.
+final chatMessagesProvider =
+    StreamProvider.family<List<MessageModel>, String>((ref, chatId) {
+  return ref.watch(chatRepositoryProvider).messageStream(chatId);
+});
