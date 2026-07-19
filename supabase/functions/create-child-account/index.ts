@@ -18,14 +18,33 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
+// Supabase Edge Functions add no CORS headers by default. Called directly
+// from the Flutter web client, so the browser sends a CORS preflight
+// (OPTIONS) before the real POST — without this, every browser call fails
+// at the preflight with a 405 before the function body ever runs.
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'method not allowed' }), { status: 405 });
+    return new Response(JSON.stringify({ error: 'method not allowed' }), {
+      status: 405,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) {
-    return new Response(JSON.stringify({ error: 'missing authorization header' }), { status: 401 });
+    return new Response(JSON.stringify({ error: 'missing authorization header' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -43,7 +62,10 @@ Deno.serve(async (req) => {
   } = await callerClient.auth.getUser();
 
   if (callerAuthError || !callerAuthUser) {
-    return new Response(JSON.stringify({ error: 'invalid session' }), { status: 401 });
+    return new Response(JSON.stringify({ error: 'invalid session' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   const { data: callerRow, error: callerRowError } = await callerClient
@@ -53,10 +75,16 @@ Deno.serve(async (req) => {
     .maybeSingle();
 
   if (callerRowError || !callerRow) {
-    return new Response(JSON.stringify({ error: 'caller has no family membership' }), { status: 403 });
+    return new Response(JSON.stringify({ error: 'caller has no family membership' }), {
+      status: 403,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
   if (callerRow.role !== 'parent') {
-    return new Response(JSON.stringify({ error: 'only a parent can create a child account' }), { status: 403 });
+    return new Response(JSON.stringify({ error: 'only a parent can create a child account' }), {
+      status: 403,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   const body = await req.json().catch(() => null);
@@ -66,7 +94,10 @@ Deno.serve(async (req) => {
   const pin: string | undefined = body?.pin;
 
   if (!displayName || typeof displayName !== 'string') {
-    return new Response(JSON.stringify({ error: 'display_name is required' }), { status: 400 });
+    return new Response(JSON.stringify({ error: 'display_name is required' }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   // Service-role client: bypasses RLS deliberately, scoped to exactly the
@@ -89,7 +120,7 @@ Deno.serve(async (req) => {
   if (createAuthError || !createdAuthUser?.user) {
     return new Response(
       JSON.stringify({ error: `failed to create child identity: ${createAuthError?.message}` }),
-      { status: 500 },
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   }
 
@@ -117,11 +148,14 @@ Deno.serve(async (req) => {
   if (insertError) {
     // Roll back the orphaned auth identity if the users insert failed.
     await adminClient.auth.admin.deleteUser(createdAuthUser.user.id);
-    return new Response(JSON.stringify({ error: insertError.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: insertError.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   return new Response(JSON.stringify(childRow), {
     status: 200,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 });

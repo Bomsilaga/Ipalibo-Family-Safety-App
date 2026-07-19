@@ -10,6 +10,16 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
+// Supabase Edge Functions add no CORS headers by default. Called directly
+// from the Flutter web client, so the browser sends a CORS preflight
+// (OPTIONS) before the real POST — without this, every browser call fails
+// at the preflight with a 405 before the function body ever runs.
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 const admin = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -20,14 +30,22 @@ async function sha256Hex(input: string): Promise<string> {
   return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+function json(status: number, body: unknown) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
 Deno.serve(async (req) => {
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'method not allowed' }), { status: 405 });
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
   }
+  if (req.method !== 'POST') return json(405, { error: 'method not allowed' });
+
   const authHeader = req.headers.get('Authorization');
-  if (!authHeader) {
-    return new Response(JSON.stringify({ error: 'missing authorization' }), { status: 401 });
-  }
+  if (!authHeader) return json(401, { error: 'missing authorization' });
+
   const callerClient = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_ANON_KEY')!,
@@ -36,7 +54,7 @@ Deno.serve(async (req) => {
   const {
     data: { user },
   } = await callerClient.auth.getUser();
-  if (!user) return new Response(JSON.stringify({ error: 'invalid session' }), { status: 401 });
+  if (!user) return json(401, { error: 'invalid session' });
 
   const { data: existing } = await admin
     .from('users')
@@ -44,14 +62,14 @@ Deno.serve(async (req) => {
     .eq('id', user.id)
     .maybeSingle();
   if (existing) {
-    return new Response(JSON.stringify({ error: 'already a member of a family' }), { status: 409 });
+    return json(409, { error: 'already a member of a family' });
   }
 
   const body = await req.json().catch(() => null);
   const token: string | undefined = body?.token;
   const displayName: string | undefined = body?.display_name;
   if (!token || !displayName) {
-    return new Response(JSON.stringify({ error: 'token and display_name are required' }), { status: 400 });
+    return json(400, { error: 'token and display_name are required' });
   }
 
   const { data: invite } = await admin
@@ -62,11 +80,11 @@ Deno.serve(async (req) => {
     .maybeSingle();
 
   if (!invite) {
-    return new Response(JSON.stringify({ error: 'invite not found or no longer valid' }), { status: 404 });
+    return json(404, { error: 'invite not found or no longer valid' });
   }
   if (new Date(invite.expires_at) < new Date()) {
     await admin.from('family_invites').update({ status: 'expired' }).eq('id', invite.id);
-    return new Response(JSON.stringify({ error: 'invite expired' }), { status: 410 });
+    return json(410, { error: 'invite expired' });
   }
 
   const { data: userRow, error: insertError } = await admin
@@ -82,7 +100,7 @@ Deno.serve(async (req) => {
     .select()
     .single();
   if (insertError) {
-    return new Response(JSON.stringify({ error: insertError.message }), { status: 500 });
+    return json(500, { error: insertError.message });
   }
 
   await admin
@@ -98,8 +116,5 @@ Deno.serve(async (req) => {
     target_id: invite.id,
   });
 
-  return new Response(JSON.stringify(userRow), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return json(200, userRow);
 });
