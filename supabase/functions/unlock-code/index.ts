@@ -17,6 +17,16 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
+// Supabase Edge Functions add no CORS headers by default. Called directly
+// from the Flutter web client, so the browser sends a CORS preflight
+// (OPTIONS) before the real POST — without this, every browser call fails
+// at the preflight with a 405 before the function body ever runs.
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 const MAX_ATTEMPTS = 5;
 const CODE_TTL_MS = 5 * 60 * 1000;
 
@@ -51,11 +61,14 @@ async function caller(req: Request) {
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 }
 
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
   if (req.method !== 'POST') return json(405, { error: 'method not allowed' });
   const me = await caller(req);
   if (!me) return json(401, { error: 'invalid session' });

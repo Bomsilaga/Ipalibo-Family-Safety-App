@@ -11,18 +11,37 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
+// Supabase Edge Functions add no CORS headers by default. Called directly
+// from the Flutter web client, so the browser sends a CORS preflight
+// (OPTIONS) before the real POST — without this, every browser call fails
+// at the preflight with a 405 before the function body ever runs.
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 const admin = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 );
 
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'method not allowed' }), { status: 405 });
+    return new Response(JSON.stringify({ error: 'method not allowed' }), {
+      status: 405,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) {
-    return new Response(JSON.stringify({ error: 'missing authorization' }), { status: 401 });
+    return new Response(JSON.stringify({ error: 'missing authorization' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
   const callerClient = createClient(
     Deno.env.get('SUPABASE_URL')!,
@@ -32,7 +51,12 @@ Deno.serve(async (req) => {
   const {
     data: { user },
   } = await callerClient.auth.getUser();
-  if (!user) return new Response(JSON.stringify({ error: 'invalid session' }), { status: 401 });
+  if (!user) {
+    return new Response(JSON.stringify({ error: 'invalid session' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
 
   const { data: me } = await callerClient
     .from('users')
@@ -40,7 +64,10 @@ Deno.serve(async (req) => {
     .eq('id', user.id)
     .maybeSingle();
   if (!me?.family_id) {
-    return new Response(JSON.stringify({ error: 'no family membership' }), { status: 403 });
+    return new Response(JSON.stringify({ error: 'no family membership' }), {
+      status: 403,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   const body = await req.json().catch(() => ({}));
@@ -59,7 +86,10 @@ Deno.serve(async (req) => {
     .select()
     .single();
   if (sosError) {
-    return new Response(JSON.stringify({ error: sosError.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: sosError.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   const { data: parents } = await admin
@@ -99,6 +129,6 @@ Deno.serve(async (req) => {
 
   return new Response(JSON.stringify({ ok: true, sos_id: sos.id, parents_notified: parents?.length ?? 0 }), {
     status: 200,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 });

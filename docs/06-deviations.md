@@ -154,6 +154,29 @@ task), and the Android restriction level needs a family decision
 pipeline stops at level 4 (parent notified) until then — level 5 hooks in
 once the entitlement exists.
 
+### Edge Functions: missing CORS headers blocked every browser call
+
+None of the six Edge Functions handled CORS at all. Supabase Edge Functions
+add no CORS headers by default, and the four called directly from the
+Flutter web client (`create-child-account`, `accept-invite`, `unlock-code`,
+`sos-fanout`) only checked `req.method !== 'POST'` and returned 405 for
+anything else — including the browser's CORS preflight `OPTIONS` request,
+which every cross-origin POST with an `Authorization`/`Content-Type` header
+triggers. The preflight failed before the real POST was ever sent, so
+"Add a child," invite acceptance, unlock code generation/redemption, and
+SOS all silently failed from the web app with no way for the client to see
+why (the browser blocks the response, not the server — nothing to catch).
+`chat-fanout` and `schedule-notifications` are only invoked server-side
+(DB trigger / cron) and were unaffected.
+
+Fixed by adding an `OPTIONS` branch (returns 200 with
+`Access-Control-Allow-*` headers) and CORS headers on every response,
+success and error, in all four browser-invoked functions. Root-caused via
+`get_logs(service: 'edge-function')`, which showed `OPTIONS | 405` for
+`create-child-account`; verified the fix with a direct `curl -X OPTIONS`
+against the live function and an end-to-end browser test (Playwright)
+that successfully created a child account through the deployed UI.
+
 ### SOS: SMS fallback not configured
 
 `sos-fanout` delivers push + in-app notifications to all parents. The
