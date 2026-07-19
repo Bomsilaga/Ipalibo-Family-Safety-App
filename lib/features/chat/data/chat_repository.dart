@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -54,6 +56,49 @@ class ChatRepository {
       'sender_id': senderId,
       'type': 'text',
       'body': body,
+      if (replyToId != null) 'reply_to_id': replyToId,
+    });
+  }
+
+  /// Uploads an image to the private `chat-media` bucket under
+  /// `{family_id}/{chat_id}/...` (matches the storage RLS policy, which
+  /// keys off that first path segment) and returns the storage path —
+  /// not a URL, since the bucket is private and every read needs a
+  /// freshly signed URL (see [signedUrlForPath]).
+  Future<String> uploadChatImage({
+    required String familyId,
+    required String chatId,
+    required Uint8List bytes,
+    required String fileExt,
+    String? contentType,
+  }) async {
+    final path =
+        '$familyId/$chatId/${DateTime.now().microsecondsSinceEpoch}.$fileExt';
+    await _client.storage.from('chat-media').uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(contentType: contentType),
+        );
+    return path;
+  }
+
+  Future<String> signedUrlForPath(String path, {int expiresInSeconds = 3600}) {
+    return _client.storage.from('chat-media').createSignedUrl(path, expiresInSeconds);
+  }
+
+  Future<void> sendImage({
+    required String chatId,
+    required String senderId,
+    required String storagePath,
+    String? caption,
+    String? replyToId,
+  }) async {
+    await _client.from('messages').insert({
+      'chat_id': chatId,
+      'sender_id': senderId,
+      'type': 'image',
+      'body': caption,
+      'media_url': storagePath,
       if (replyToId != null) 'reply_to_id': replyToId,
     });
   }
