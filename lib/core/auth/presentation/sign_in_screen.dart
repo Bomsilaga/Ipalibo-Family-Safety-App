@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../network/auth_settings.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../auth_providers.dart';
@@ -69,6 +70,24 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       setState(() => _errorMessage = e.toString());
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _forgotPassword() async {
+    final email = _emailController.text.trim();
+    if (!email.contains('@')) {
+      setState(() => _errorMessage = 'Enter your email above first, then tap "Forgot password?"');
+      return;
+    }
+    setState(() {
+      _errorMessage = null;
+      _infoMessage = null;
+    });
+    try {
+      await ref.read(authRepositoryProvider).sendPasswordResetEmail(email);
+      setState(() => _infoMessage = 'Password reset email sent — check your inbox.');
+    } catch (e) {
+      setState(() => _errorMessage = 'Could not send reset email: $e');
     }
   }
 
@@ -145,6 +164,16 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   const SizedBox(height: AppSpacing.md),
                   Text(_infoMessage!, style: typography.small.copyWith(color: colors.emerald700)),
                 ],
+                if (!_isSignUp) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _isSubmitting ? null : _forgotPassword,
+                      child: const Text('Forgot password?'),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.lg),
                 ElevatedButton(
                   onPressed: _isSubmitting ? null : _submit,
@@ -171,27 +200,48 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                         : 'New family? Create an account',
                   ),
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                Row(children: [
-                  Expanded(child: Divider(color: colors.gray[3])),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                    child: Text('or', style: typography.small.copyWith(color: colors.gray[5])),
-                  ),
-                  Expanded(child: Divider(color: colors.gray[3])),
-                ]),
-                const SizedBox(height: AppSpacing.lg),
-                OutlinedButton.icon(
-                  onPressed: _isSubmitting ? null : () => _oAuthSignIn(isApple: true),
-                  icon: const Icon(Icons.apple),
-                  label: const Text('Continue with Apple'),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                OutlinedButton.icon(
-                  onPressed: _isSubmitting ? null : () => _oAuthSignIn(isApple: false),
-                  icon: const Icon(Icons.g_mobiledata),
-                  label: const Text('Continue with Google'),
-                ),
+                // On web, tapping a disabled OAuth provider does a full
+                // top-level browser redirect straight to Supabase before
+                // any Dart code runs, surfacing its raw JSON error page —
+                // there's no exception to catch client-side. Only show a
+                // provider's button once /auth/v1/settings confirms it's
+                // actually turned on.
+                Consumer(builder: (context, ref, _) {
+                  final providersAsync = ref.watch(enabledOAuthProvidersProvider);
+                  final providers = providersAsync.value ?? const {};
+                  final showApple = providers.contains('apple');
+                  final showGoogle = providers.contains('google');
+                  if (!showApple && !showGoogle) return const SizedBox();
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: AppSpacing.lg),
+                      Row(children: [
+                        Expanded(child: Divider(color: colors.gray[3])),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                          child:
+                              Text('or', style: typography.small.copyWith(color: colors.gray[5])),
+                        ),
+                        Expanded(child: Divider(color: colors.gray[3])),
+                      ]),
+                      const SizedBox(height: AppSpacing.lg),
+                      if (showApple)
+                        OutlinedButton.icon(
+                          onPressed: _isSubmitting ? null : () => _oAuthSignIn(isApple: true),
+                          icon: const Icon(Icons.apple),
+                          label: const Text('Continue with Apple'),
+                        ),
+                      if (showApple && showGoogle) const SizedBox(height: AppSpacing.sm),
+                      if (showGoogle)
+                        OutlinedButton.icon(
+                          onPressed: _isSubmitting ? null : () => _oAuthSignIn(isApple: false),
+                          icon: const Icon(Icons.g_mobiledata),
+                          label: const Text('Continue with Google'),
+                        ),
+                    ],
+                  );
+                }),
               ],
             ),
           ),

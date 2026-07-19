@@ -46,6 +46,13 @@ class AuthRepository {
     return _client.auth.signInWithPassword(email: email, password: password);
   }
 
+  /// Sends a password-reset email via Supabase's built-in flow. The link
+  /// lands the user back in the app (see docs/06-deviations.md for the
+  /// redirect target once a dedicated reset-password screen exists).
+  Future<void> sendPasswordResetEmail(String email) {
+    return _client.auth.resetPasswordForEmail(email);
+  }
+
   Future<bool> signInWithApple() {
     return _client.auth.signInWithOAuth(OAuthProvider.apple);
   }
