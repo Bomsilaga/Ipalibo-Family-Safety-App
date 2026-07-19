@@ -74,6 +74,24 @@ itself was permitted. Fixed by adding `families.created_by` (defaults to
 "this is my own row" (`created_by = auth.uid()` / `id = auth.uid()`) —
 applied directly to the live project, documented in `02-data-model.md`.
 
+### RLS: `events` ↔ `event_participants` circular policy reference
+
+`events`' SELECT policy checked participation via a subquery on
+`event_participants`; `event_participants`' policies checked back into
+`events` via a subquery. Each subquery re-triggers the other table's RLS
+(subqueries against a table go through that table's policies same as any
+other query), so Postgres detected infinite recursion (`42P17`) the first
+time a client tried to create an event. Fixed by adding three
+`SECURITY DEFINER` helpers (`is_event_participant`, `event_owner_or_parent`,
+`family_id_of_event` — same bypass-RLS-on-the-way-through pattern as
+`current_family_id()`/`is_parent()`/`is_chat_member()`) and rewiring both
+tables' policies to call them instead of querying each other directly.
+Audited every other cross-table RLS policy in the schema for the same
+mutual-reference shape (`chat_members`, `messages`, `redemptions`,
+`task_assignees`, `task_completions`, `safe_zone_events`,
+`event_attachments`) — all of them are one-directional (child table checks
+its parent, parent never checks back), so this was isolated to `events`.
+
 ## Modules 2–12 (full build pass)
 
 ### Chat: application-layer E2E encryption deferred
