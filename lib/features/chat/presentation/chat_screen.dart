@@ -23,6 +23,7 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
+  bool _sending = false;
 
   @override
   void dispose() {
@@ -33,11 +34,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Future<void> _send(String chatId) async {
     final text = _inputController.text.trim();
-    if (text.isEmpty) return;
+    // Guards against the input clearing before a send actually lands: if
+    // sendText throws (RLS rejection, dropped connection, whatever), the
+    // typed text must still be sitting in the box afterwards rather than
+    // silently vanishing with nothing sent and no error shown.
+    if (text.isEmpty || _sending) return;
     final me = await ref.read(currentAppUserProvider.future);
     if (me == null) return;
-    _inputController.clear();
-    await ref.read(chatRepositoryProvider).sendText(chatId: chatId, senderId: me.id, body: text);
+    setState(() => _sending = true);
+    try {
+      await ref.read(chatRepositoryProvider).sendText(chatId: chatId, senderId: me.id, body: text);
+      _inputController.clear();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Message not sent: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
   }
 
   @override
@@ -60,6 +76,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             chatId: chatId,
             inputController: _inputController,
             scrollController: _scrollController,
+            sending: _sending,
             onSend: () => _send(chatId),
           );
         },
@@ -76,12 +93,14 @@ class _ChatBody extends ConsumerWidget {
     required this.chatId,
     required this.inputController,
     required this.scrollController,
+    required this.sending,
     required this.onSend,
   });
 
   final String chatId;
   final TextEditingController inputController;
   final ScrollController scrollController;
+  final bool sending;
   final VoidCallback onSend;
 
   @override
@@ -143,6 +162,7 @@ class _ChatBody extends ConsumerWidget {
                 Expanded(
                   child: TextField(
                     controller: inputController,
+                    enabled: !sending,
                     decoration: const InputDecoration(hintText: 'Message'),
                     textInputAction: TextInputAction.send,
                     onSubmitted: (_) => onSend(),
@@ -151,8 +171,14 @@ class _ChatBody extends ConsumerWidget {
                 const SizedBox(width: AppSpacing.sm),
                 IconButton.filled(
                   style: IconButton.styleFrom(backgroundColor: colors.emerald700),
-                  icon: const Icon(Icons.send, color: Colors.white),
-                  onPressed: onSend,
+                  icon: sending
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.send, color: Colors.white),
+                  onPressed: sending ? null : onSend,
                 ),
               ],
             ),
