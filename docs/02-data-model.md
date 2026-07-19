@@ -12,6 +12,7 @@ families (
   timezone text not null default 'Australia/Melbourne',
   quiet_hours_start time,
   quiet_hours_end time,
+  created_by uuid references auth.users(id) default auth.uid(), -- the founding parent; lets them see/select the row they just created via RETURNING before their own `users` row (and thus current_family_id()) exists
   created_at timestamptz not null default now()
 )
 

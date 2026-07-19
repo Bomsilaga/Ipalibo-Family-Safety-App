@@ -59,6 +59,39 @@ implemented** — confirm the pin still supports whatever Drift version is
 in use at that point, or find an environment where the GitHub download
 succeeds and drop the override.
 
+### RLS: SELECT policies on `families` and `users` must let a founder see their own not-yet-onboarded rows
+
+`current_family_id()` is `STABLE` and reads `public.users`, so it can't see
+a row that the *current* statement is still in the middle of inserting. The
+founding parent's flow — `insert into families ... returning` immediately
+followed by `insert into users ... returning` — hit this twice: PostgREST's
+`RETURNING` (used by every `.select()` call) checks the row against the
+table's SELECT policy, not just its INSERT `WITH CHECK`. Before the
+founder's `users` row exists, `current_family_id()` returns null, so
+`id = current_family_id()` fails on both tables even though the insert
+itself was permitted. Fixed by adding `families.created_by` (defaults to
+`auth.uid()`) and widening both SELECT policies to also match on
+"this is my own row" (`created_by = auth.uid()` / `id = auth.uid()`) —
+applied directly to the live project, documented in `02-data-model.md`.
+
+### RLS: `events` ↔ `event_participants` circular policy reference
+
+`events`' SELECT policy checked participation via a subquery on
+`event_participants`; `event_participants`' policies checked back into
+`events` via a subquery. Each subquery re-triggers the other table's RLS
+(subqueries against a table go through that table's policies same as any
+other query), so Postgres detected infinite recursion (`42P17`) the first
+time a client tried to create an event. Fixed by adding three
+`SECURITY DEFINER` helpers (`is_event_participant`, `event_owner_or_parent`,
+`family_id_of_event` — same bypass-RLS-on-the-way-through pattern as
+`current_family_id()`/`is_parent()`/`is_chat_member()`) and rewiring both
+tables' policies to call them instead of querying each other directly.
+Audited every other cross-table RLS policy in the schema for the same
+mutual-reference shape (`chat_members`, `messages`, `redemptions`,
+`task_assignees`, `task_completions`, `safe_zone_events`,
+`event_attachments`) — all of them are one-directional (child table checks
+its parent, parent never checks back), so this was isolated to `events`.
+
 ## Modules 2–12 (full build pass)
 
 ### Chat: application-layer E2E encryption deferred
@@ -72,6 +105,17 @@ Currently bodies travel over TLS and sit behind family-scoped RLS, but
 Supabase can technically read them. The repository (`chat_repository.dart`)
 carries a matching note. Design and implement the key scheme before any
 production launch.
+
+### GPS: reverse geocoding added; full map tile still blocked on a Google Maps API key
+
+Check-in and member tiles used to show raw lat/lng, which reads as broken
+to a non-technical user. Added `GpsRepository.reverseGeocode` (OpenStreetMap
+Nominatim, free, no API key) to turn coordinates into a place string
+("14 Smith St, Fitzroy") — this doesn't need any human setup. The full-bleed
+map view is unchanged and still blocked on a Google Maps API key per
+platform (see below); that's a genuinely separate capability (rendering an
+interactive map) from labelling a point, which reverse geocoding solves on
+its own.
 
 ### GPS: foreground check-in only; background tracking blocked on entitlements
 

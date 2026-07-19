@@ -105,14 +105,14 @@ class _FamilyTab extends ConsumerWidget {
   }
 }
 
-class _MemberTile extends StatelessWidget {
+class _MemberTile extends ConsumerWidget {
   const _MemberTile({required this.member, required this.location});
 
   final AppUser member;
   final dynamic location;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.appColors;
     final typography = context.appTypography;
     final age = DateTime.now().difference(location.recordedAt as DateTime);
@@ -121,15 +121,23 @@ class _MemberTile extends StatelessWidget {
         : age.inHours < 1
             ? '${age.inMinutes} min ago'
             : '${age.inHours} h ago';
+    final lat = location.latitude as double;
+    final lng = location.longitude as double;
+    final coords = '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}';
+    final roundedKey = (
+      double.parse(lat.toStringAsFixed(4)),
+      double.parse(lng.toStringAsFixed(4)),
+    );
+    final placeAsync = ref.watch(placeNameProvider(roundedKey));
+    final place = placeAsync.value;
     return Card(
       margin: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: ListTile(
         leading: MemberAvatar(user: member),
         title: Text(member.displayName),
         subtitle: Text(
-          '${(location.latitude as double).toStringAsFixed(5)}, '
-          '${(location.longitude as double).toStringAsFixed(5)} · $freshness',
-          style: typography.mono,
+          '${place ?? coords} · $freshness',
+          style: place != null ? typography.small : typography.mono,
         ),
         trailing: location.batteryPct != null
             ? Row(

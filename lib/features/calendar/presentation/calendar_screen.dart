@@ -167,20 +167,23 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                         color: _isToday(day) ? colors.emerald700 : null,
                       )),
                   if (byDay.containsKey(day))
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        for (final e in byDay[day]!.take(3))
-                          Container(
-                            width: 6,
-                            height: 6,
-                            margin: const EdgeInsets.symmetric(horizontal: 1),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: e.color != null ? memberColor(e.color!) : colors.emerald500,
-                            ),
-                          ),
-                      ],
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Text(
+                        byDay[day]!.length == 1
+                            ? byDay[day]!.first.title
+                            : '${byDay[day]!.length} events',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          color: byDay[day]!.first.color != null
+                              ? memberColor(byDay[day]!.first.color!)
+                              : colors.emerald700,
+                        ),
+                      ),
                     ),
                 ],
               ),
