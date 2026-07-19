@@ -22,6 +22,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   final _passwordController = TextEditingController();
   bool _isSignUp = false;
   bool _isSubmitting = false;
+  bool _obscurePassword = true;
   String? _errorMessage;
   String? _infoMessage;
 
@@ -151,8 +152,14 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 const SizedBox(height: AppSpacing.md),
                 TextFormField(
                   controller: _passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(hintText: 'Password'),
+                  obscureText: _obscurePassword,
+                  decoration: InputDecoration(
+                    hintText: 'Password',
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    ),
+                  ),
                   validator: (value) =>
                       (value == null || value.length < 8) ? 'At least 8 characters' : null,
                 ),

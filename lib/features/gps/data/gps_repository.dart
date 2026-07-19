@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/network/supabase_client.dart';
@@ -87,6 +90,40 @@ class GpsRepository {
   Future<void> deleteSafeZone(String id) async {
     await _client.from('safe_zones').delete().eq('id', id);
   }
+
+  /// Turns a lat/lng into a human-readable place ("14 Smith St, Fitzroy")
+  /// via OpenStreetMap's free Nominatim endpoint — no API key needed,
+  /// unlike the full map tile (docs/06-deviations.md: that needs a Google
+  /// Maps key a human must register per platform). Falls back to null
+  /// (caller shows raw coordinates) on any network/parse failure.
+  Future<String?> reverseGeocode(double latitude, double longitude) async {
+    try {
+      final uri = Uri.parse('https://nominatim.openstreetmap.org/reverse').replace(
+        queryParameters: {
+          'format': 'jsonv2',
+          'lat': latitude.toString(),
+          'lon': longitude.toString(),
+          'zoom': '18',
+        },
+      );
+      final response = await http
+          .get(uri, headers: {'User-Agent': 'IpalibosFamilyApp/1.0 (family safety app)'})
+          .timeout(const Duration(seconds: 6));
+      if (response.statusCode != 200) return null;
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final address = body['address'] as Map<String, dynamic>?;
+      if (address == null) return body['display_name'] as String?;
+      final parts = [
+        (address['house_number'] as String?),
+        (address['road'] as String?),
+        (address['suburb'] ?? address['neighbourhood'] ?? address['city_district']) as String?,
+        (address['city'] ?? address['town'] ?? address['village']) as String?,
+      ].whereType<String>().toList();
+      return parts.isNotEmpty ? parts.join(', ') : body['display_name'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 final gpsRepositoryProvider = Provider<GpsRepository>((ref) => GpsRepository(supabase));
@@ -97,4 +134,10 @@ final latestLocationsProvider = FutureProvider<Map<String, MemberLocation>>((ref
 
 final safeZonesProvider = FutureProvider<List<SafeZone>>((ref) async {
   return ref.watch(gpsRepositoryProvider).safeZones();
+});
+
+/// Cached per rounded coordinate (~11m precision) so repeated check-ins
+/// near the same spot don't re-hit the geocoder.
+final placeNameProvider = FutureProvider.family<String?, (double, double)>((ref, coords) async {
+  return ref.watch(gpsRepositoryProvider).reverseGeocode(coords.$1, coords.$2);
 });

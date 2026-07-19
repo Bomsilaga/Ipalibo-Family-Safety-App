@@ -115,20 +115,29 @@ class _TaskBuilderSheetState extends ConsumerState<TaskBuilderSheet> {
             Text('Assign to', style: context.appTypography.small),
             const SizedBox(height: AppSpacing.sm),
             membersAsync.when(
-              data: (members) => Wrap(
-                spacing: AppSpacing.sm,
-                children: [
-                  for (final m in members.where((m) => m.role == UserRole.child))
-                    FilterChip(
-                      avatar: MemberAvatar(user: m, radius: 10),
-                      label: Text(m.displayName),
-                      selected: _assignees.contains(m.id),
-                      onSelected: (sel) => setState(() {
-                        sel ? _assignees.add(m.id) : _assignees.remove(m.id);
-                      }),
-                    ),
-                ],
-              ),
+              data: (members) {
+                final children = members.where((m) => m.role == UserRole.child).toList();
+                if (children.isEmpty) {
+                  return Text(
+                    'No children on this family yet — add one from the Family tab first.',
+                    style: context.appTypography.small.copyWith(color: colors.gray[6]),
+                  );
+                }
+                return Wrap(
+                  spacing: AppSpacing.sm,
+                  children: [
+                    for (final m in children)
+                      FilterChip(
+                        avatar: MemberAvatar(user: m, radius: 10),
+                        label: Text(m.displayName),
+                        selected: _assignees.contains(m.id),
+                        onSelected: (sel) => setState(() {
+                          sel ? _assignees.add(m.id) : _assignees.remove(m.id);
+                        }),
+                      ),
+                  ],
+                );
+              },
               loading: () => const SizedBox(),
               error: (_, _) => const SizedBox(),
             ),
