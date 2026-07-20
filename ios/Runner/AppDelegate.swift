@@ -12,7 +12,7 @@ import UIKit
     // own iOS-restriction (bundle ID) in Google Cloud Console — it cannot
     // share an HTTP-referrer restriction with the web key of the same
     // value; get a separate key per platform before shipping to app stores.
-    GMSServices.provideAPIKey("AIzaSyCVIrqz2CResntrolbXTUXl7c9jj8BJb-8")
+    GMSServices.provideAPIKey("AIzaSyAkerJDhUS9NPLnKQEVGMSh0E55ufdlONc")
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
