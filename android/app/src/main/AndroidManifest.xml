@@ -12,7 +12,7 @@
              platform before shipping to app stores. -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyCVIrqz2CResntrolbXTUXl7c9jj8BJb-8" />
+            android:value="AIzaSyAkerJDhUS9NPLnKQEVGMSh0E55ufdlONc" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
