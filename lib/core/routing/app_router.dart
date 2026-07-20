@@ -84,16 +84,54 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/lock', builder: (context, state) => const LockScreen()),
       GoRoute(path: '/sign-in', builder: (context, state) => const SignInScreen()),
       GoRoute(path: '/family-setup', builder: (context, state) => const FamilySetupScreen()),
-      GoRoute(path: '/gps', builder: (context, state) => const GpsScreen()),
-      GoRoute(path: '/sos', builder: (context, state) => const SosScreen()),
-      GoRoute(path: '/rewards', builder: (context, state) => const RewardsScreen()),
-      GoRoute(path: '/reports', builder: (context, state) => const ReportsScreen()),
-      GoRoute(path: '/unlock-requests', builder: (context, state) => const UnlockRequestsScreen()),
-      GoRoute(path: '/notifications', builder: (context, state) => const NotificationInboxScreen()),
-      GoRoute(path: '/briefing', builder: (context, state) => const DailyBriefingScreen()),
-      GoRoute(path: '/family-settings', builder: (context, state) => const FamilySettingsScreen()),
-      GoRoute(path: '/security', builder: (context, state) => const SecuritySettingsScreen()),
-      GoRoute(path: '/switch-profile', builder: (context, state) => const SwitchProfileScreen()),
+      GoRoute(
+        path: '/gps',
+        builder: (context, state) => const SecondaryScreenShell(highlightedTabIndex: 5, child: GpsScreen()),
+      ),
+      GoRoute(
+        path: '/sos',
+        builder: (context, state) => const SecondaryScreenShell(highlightedTabIndex: 5, child: SosScreen()),
+      ),
+      GoRoute(
+        path: '/rewards',
+        builder: (context, state) => const SecondaryScreenShell(highlightedTabIndex: 5, child: RewardsScreen()),
+      ),
+      GoRoute(
+        path: '/reports',
+        builder: (context, state) => const SecondaryScreenShell(highlightedTabIndex: 5, child: ReportsScreen()),
+      ),
+      GoRoute(
+        path: '/unlock-requests',
+        builder: (context, state) =>
+            const SecondaryScreenShell(highlightedTabIndex: 5, child: UnlockRequestsScreen()),
+      ),
+      GoRoute(
+        path: '/notifications',
+        builder: (context, state) =>
+            const SecondaryScreenShell(highlightedTabIndex: 5, child: NotificationInboxScreen()),
+      ),
+      GoRoute(
+        path: '/briefing',
+        builder: (context, state) =>
+            const SecondaryScreenShell(highlightedTabIndex: 5, child: DailyBriefingScreen()),
+      ),
+      GoRoute(
+        path: '/family-settings',
+        builder: (context, state) =>
+            const SecondaryScreenShell(highlightedTabIndex: 5, child: FamilySettingsScreen()),
+      ),
+      GoRoute(
+        path: '/security',
+        builder: (context, state) =>
+            const SecondaryScreenShell(highlightedTabIndex: 5, child: SecuritySettingsScreen()),
+      ),
+      GoRoute(
+        path: '/switch-profile',
+        builder: (context, state) =>
+            const SecondaryScreenShell(highlightedTabIndex: 5, child: SwitchProfileScreen()),
+      ),
+      // Call screen stays full-screen/no chrome deliberately — it's an
+      // immersive Daily.co embed, not a navigable "page".
       GoRoute(
         path: '/call/:callId',
         builder: (context, state) => CallScreen(
@@ -103,7 +141,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/task/:id',
-        builder: (context, state) => TaskDetailScreen(task: state.extra as TaskModel),
+        builder: (context, state) =>
+            SecondaryScreenShell(highlightedTabIndex: 2, child: TaskDetailScreen(task: state.extra as TaskModel)),
       ),
       GoRoute(
         path: '/task-completed',

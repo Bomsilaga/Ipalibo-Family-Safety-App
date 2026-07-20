@@ -9,6 +9,8 @@ import '../auth/app_user.dart';
 import '../auth/auth_providers.dart';
 import '../theme/app_theme.dart';
 
+const _tabPaths = ['/home', '/calendar', '/tasks', '/chat', '/family', '/more'];
+
 /// Bottom tab bar shell: Home · Calendar · Tasks · Chat · Family · More
 /// (docs/04-design-system.md "Mobile navigation"). Also owns the
 /// family-wide incoming-call banner — calls are family-scoped, not
@@ -20,7 +22,6 @@ class AppShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colors = context.appColors;
     final me = ref.watch(currentAppUserProvider).value;
 
     return Scaffold(
@@ -30,44 +31,94 @@ class AppShell extends ConsumerWidget {
           Expanded(child: navigationShell),
         ],
       ),
-      // Long-press anywhere on the tab bar = fast SOS entry, reachable in
-      // one motion from any tab (docs/04-design-system.md "Mobile
-      // navigation").
-      bottomNavigationBar: GestureDetector(
-        onLongPress: () => GoRouter.of(context).push('/sos'),
-        child: BottomNavigationBar(
+      bottomNavigationBar: AppBottomNavBar(
         currentIndex: navigationShell.currentIndex,
         onTap: (index) => navigationShell.goBranch(
           index,
           initialLocation: index == navigationShell.currentIndex,
         ),
-        items: [
-          const BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: 'Home'),
-          const BottomNavigationBarItem(
+      ),
+    );
+  }
+}
+
+/// Every screen reachable from the More menu (Live Location, Rewards,
+/// Reports, Unlock Requests, Notifications, Daily Briefing, Family
+/// Settings, Security, Switch Profile, SOS) and task detail sit outside
+/// the StatefulShellRoute — they're one-off destinations, not tabs with
+/// their own persistent nav stack. Without this wrapper they rendered
+/// full-screen with no way back to another tab except the OS back
+/// button/gesture. Wraps them in the same bottom nav bar, with taps
+/// switching straight to that tab (deliberately exits the current
+/// stack, same as tapping a tab from anywhere else in the app).
+class SecondaryScreenShell extends ConsumerWidget {
+  const SecondaryScreenShell({super.key, required this.child, this.highlightedTabIndex = 5});
+
+  final Widget child;
+  final int highlightedTabIndex;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final me = ref.watch(currentAppUserProvider).value;
+
+    return Scaffold(
+      body: Column(
+        children: [
+          if (me?.familyId != null) _IncomingCallListener(familyId: me!.familyId!, me: me),
+          Expanded(child: child),
+        ],
+      ),
+      bottomNavigationBar: AppBottomNavBar(
+        currentIndex: highlightedTabIndex,
+        onTap: (index) => context.go(_tabPaths[index]),
+      ),
+    );
+  }
+}
+
+class AppBottomNavBar extends StatelessWidget {
+  const AppBottomNavBar({super.key, required this.currentIndex, required this.onTap});
+
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    // Long-press anywhere on the tab bar = fast SOS entry, reachable in
+    // one motion from any tab (docs/04-design-system.md "Mobile
+    // navigation").
+    return GestureDetector(
+      onLongPress: () => GoRouter.of(context).push('/sos'),
+      child: BottomNavigationBar(
+        currentIndex: currentIndex,
+        onTap: onTap,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(
             icon: Icon(Icons.calendar_month_outlined),
             activeIcon: Icon(Icons.calendar_month),
             label: 'Calendar',
           ),
-          const BottomNavigationBarItem(
+          BottomNavigationBarItem(
             icon: Icon(Icons.checklist_outlined),
             activeIcon: Icon(Icons.checklist),
             label: 'Tasks',
           ),
-          const BottomNavigationBarItem(
+          BottomNavigationBarItem(
             icon: Icon(Icons.chat_bubble_outline),
             activeIcon: Icon(Icons.chat_bubble),
             label: 'Chat',
           ),
-          const BottomNavigationBarItem(
+          BottomNavigationBarItem(
             icon: Icon(Icons.family_restroom_outlined),
             activeIcon: Icon(Icons.family_restroom),
             label: 'Family',
           ),
-          const BottomNavigationBarItem(icon: Icon(Icons.more_horiz), label: 'More'),
+          BottomNavigationBarItem(icon: Icon(Icons.more_horiz), label: 'More'),
         ],
-          selectedItemColor: colors.emerald900,
-          unselectedItemColor: colors.gray[5],
-        ),
+        selectedItemColor: colors.emerald900,
+        unselectedItemColor: colors.gray[5],
       ),
     );
   }
