@@ -79,6 +79,24 @@ class FamilyInviteRepository {
     );
   }
 
+  /// Removes someone from the caller's family (parent-only, enforced
+  /// server-side). Detaches rather than deletes — see
+  /// `supabase/functions/remove-member` for why family history has to
+  /// survive the removal.
+  Future<void> removeMember(String userId) async {
+    final response = await _client.functions.invoke(
+      'remove-member',
+      body: {'user_id': userId},
+    );
+    if (response.status != 200) {
+      final data = response.data;
+      final message = data is Map && data['error'] != null
+          ? '${data['error']}'
+          : 'Could not remove that member (${response.status}).';
+      throw StateError(message);
+    }
+  }
+
   /// Redeems an invite code for the signed-in (but not-yet-onboarded)
   /// caller, via the service-role `accept-invite` function.
   Future<void> acceptInvite({

@@ -101,10 +101,28 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   }
 
   Future<void> _oAuthSignIn({required bool isApple}) async {
+    final providerName = isApple ? 'Apple' : 'Google';
     setState(() {
       _errorMessage = null;
       _infoMessage = null;
     });
+
+    // Guard *before* calling signInWithOAuth, not after. On web that call
+    // is a full top-level browser redirect to Supabase, which happens
+    // before any Dart runs — if the provider is switched off the user
+    // just lands on Supabase's raw JSON error page and there is no
+    // exception to catch. Checking /auth/v1/settings first is the only
+    // way to fail politely.
+    final providers = await ref.read(enabledOAuthProvidersProvider.future);
+    if (!providers.contains(isApple ? 'apple' : 'google')) {
+      setState(() {
+        _errorMessage = '$providerName sign-in isn\'t switched on for this app yet. '
+            'Enable the $providerName provider in Supabase → Authentication → Providers, '
+            'then it\'ll work here. Use email for now.';
+      });
+      return;
+    }
+
     try {
       final repo = ref.read(authRepositoryProvider);
       if (isApple) {
@@ -113,13 +131,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
         await repo.signInWithGoogle();
       }
     } catch (e) {
-      final providerName = isApple ? 'Apple' : 'Google';
-      final isNotEnabled = e.toString().contains('provider is not enabled');
-      setState(() {
-        _errorMessage = isNotEnabled
-            ? '$providerName sign-in isn\'t set up yet — use email instead.'
-            : 'Could not sign in with $providerName: $e';
-      });
+      setState(() => _errorMessage = 'Could not sign in with $providerName: $e');
     }
   }
 
@@ -248,48 +260,43 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                         )
                       : Text(_isSignUp ? 'Get Started' : 'Sign In'),
                 ),
-                // On web, tapping a disabled OAuth provider does a full
-                // top-level browser redirect straight to Supabase before
-                // any Dart code runs, surfacing its raw JSON error page —
-                // there's no exception to catch client-side. Only show a
-                // provider's button once /auth/v1/settings confirms it's
-                // actually turned on.
-                Consumer(builder: (context, ref, _) {
-                  final providersAsync = ref.watch(enabledOAuthProvidersProvider);
-                  final providers = providersAsync.value ?? const {};
-                  final showApple = providers.contains('apple');
-                  final showGoogle = providers.contains('google');
-                  if (!showApple && !showGoogle) return const SizedBox();
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const SizedBox(height: AppSpacing.lg),
-                      Row(children: [
-                        Expanded(child: Divider(color: colors.gray[3])),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                          child: Text('or continue with',
-                              style: typography.small.copyWith(color: colors.gray[5])),
-                        ),
-                        Expanded(child: Divider(color: colors.gray[3])),
-                      ]),
-                      const SizedBox(height: AppSpacing.lg),
-                      if (showApple)
-                        OutlinedButton.icon(
-                          onPressed: _isSubmitting ? null : () => _oAuthSignIn(isApple: true),
-                          icon: const Icon(Icons.apple),
-                          label: const Text('Continue with Apple'),
-                        ),
-                      if (showApple && showGoogle) const SizedBox(height: AppSpacing.sm),
-                      if (showGoogle)
-                        OutlinedButton.icon(
-                          onPressed: _isSubmitting ? null : () => _oAuthSignIn(isApple: false),
-                          icon: const Icon(Icons.g_mobiledata, size: 28),
-                          label: const Text('Continue with Google'),
-                        ),
-                    ],
-                  );
-                }),
+                // Both social buttons are always shown, per the brand
+                // mockup. Whether a provider is actually enabled is
+                // handled in _oAuthSignIn, which checks before redirecting
+                // and explains what to switch on rather than dumping the
+                // user on Supabase's raw error page.
+                const SizedBox(height: AppSpacing.lg),
+                Row(children: [
+                  Expanded(child: Divider(color: colors.gray[3])),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                    child: Text('or continue with',
+                        style: typography.small.copyWith(color: colors.gray[5])),
+                  ),
+                  Expanded(child: Divider(color: colors.gray[3])),
+                ]),
+                const SizedBox(height: AppSpacing.lg),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                    side: BorderSide(color: colors.gray[3]),
+                    foregroundColor: colors.gray[9],
+                  ),
+                  onPressed: _isSubmitting ? null : () => _oAuthSignIn(isApple: true),
+                  icon: const Icon(Icons.apple, size: 22),
+                  label: const Text('Continue with Apple'),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                    side: BorderSide(color: colors.gray[3]),
+                    foregroundColor: colors.gray[9],
+                  ),
+                  onPressed: _isSubmitting ? null : () => _oAuthSignIn(isApple: false),
+                  icon: const _GoogleGlyph(size: 20),
+                  label: const Text('Continue with Google'),
+                ),
                 const SizedBox(height: AppSpacing.md),
                 TextButton(
                   onPressed: _isSubmitting
@@ -312,4 +319,64 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
       ),
     );
   }
+}
+
+/// Google's "G" in its four brand colours. Drawn rather than shipped as an
+/// asset so it needs no network fetch (the app's CSP blocks remote images)
+/// and stays sharp at any size. Material's `Icons.g_mobiledata` is a
+/// single-colour glyph that reads as a generic letter, not as Google.
+class _GoogleGlyph extends StatelessWidget {
+  const _GoogleGlyph({this.size = 20});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(painter: _GoogleGlyphPainter()),
+    );
+  }
+}
+
+class _GoogleGlyphPainter extends CustomPainter {
+  static const _blue = Color(0xFF4285F4);
+  static const _red = Color(0xFFEA4335);
+  static const _yellow = Color(0xFFFBBC05);
+  static const _green = Color(0xFF34A853);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stroke = size.width * 0.22;
+    final rect = Rect.fromLTWH(stroke / 2, stroke / 2, size.width - stroke, size.height - stroke);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.butt;
+
+    // Four quadrant arcs, starting at the right and going clockwise, in
+    // Google's canonical colour order.
+    void arc(double startDeg, double sweepDeg, Color color) {
+      paint.color = color;
+      canvas.drawArc(rect, startDeg * 3.1415926535 / 180, sweepDeg * 3.1415926535 / 180, false, paint);
+    }
+
+    arc(-40, 75, _blue); // right side, where the crossbar meets
+    arc(35, 90, _green);
+    arc(125, 100, _yellow);
+    arc(225, 95, _red);
+
+    // The horizontal crossbar of the G.
+    final bar = Paint()
+      ..color = _blue
+      ..style = PaintingStyle.fill;
+    canvas.drawRect(
+      Rect.fromLTWH(size.width * 0.52, size.height * 0.40, size.width * 0.46, stroke),
+      bar,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
