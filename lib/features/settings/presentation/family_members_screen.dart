@@ -171,7 +171,7 @@ class FamilyMembersScreen extends ConsumerWidget {
             ListTile(
               leading: const Icon(Icons.child_care_outlined),
               title: const Text('Add a child'),
-              subtitle: const Text('Creates their account for you'),
+              subtitle: const Text('Generates a code for them to join with their own email'),
               onTap: () => Navigator.pop(ctx, 'child'),
             ),
           ],
@@ -180,23 +180,53 @@ class FamilyMembersScreen extends ConsumerWidget {
     );
     if (choice == null || !context.mounted) return;
     if (choice == 'invite') {
-      await _inviteCoParent(context, ref, me);
+      await _generateInviteFlow(
+        context,
+        ref,
+        me,
+        role: 'parent',
+        dialogTitle: 'Invite a co-parent',
+        emailHint: 'Their email',
+      );
     } else {
-      await _addChild(context, ref, me);
+      await _generateInviteFlow(
+        context,
+        ref,
+        me,
+        role: 'child',
+        dialogTitle: 'Add a child',
+        emailHint: "Child's email",
+      );
     }
   }
 
-  Future<void> _inviteCoParent(BuildContext context, WidgetRef ref, AppUser me) async {
+  /// Shared by "Invite a co-parent" and "Add a child" — both join an
+  /// *existing* family the same way (docs/06-deviations.md "founder
+  /// bootstrap"): a parent generates a code here, the invitee creates
+  /// their own account with their own email on the sign-in screen, then
+  /// redeems the code on the family-setup screen's "I have an invite
+  /// code" branch. accept-invite assigns whatever role the invite
+  /// carries, so a child invite is identical to a co-parent invite
+  /// except role: 'child' — children now sign in with their own
+  /// email/password like everyone else, not a parent-set device PIN.
+  Future<void> _generateInviteFlow(
+    BuildContext context,
+    WidgetRef ref,
+    AppUser me, {
+    required String role,
+    required String dialogTitle,
+    required String emailHint,
+  }) async {
     if (me.familyId == null) return;
     final emailController = TextEditingController();
     final proceed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Invite a co-parent'),
+        title: Text(dialogTitle),
         content: TextField(
           controller: emailController,
           keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(hintText: 'Their email'),
+          decoration: InputDecoration(hintText: emailHint),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -211,7 +241,7 @@ class FamilyMembersScreen extends ConsumerWidget {
       final code = await ref.read(familyInviteRepositoryProvider).createInvite(
             familyId: me.familyId!,
             invitedBy: me.id,
-            role: 'parent',
+            role: role,
             email: emailController.text.trim(),
           );
       if (!context.mounted) return;
@@ -223,7 +253,11 @@ class FamilyMembersScreen extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Share this code with them. They\'ll enter it after creating their account:'),
+              Text(
+                role == 'child'
+                    ? 'Share this code with them. On their own device, they\'ll create an account with their email, then enter this code to join your family:'
+                    : 'Share this code with them. They\'ll enter it after creating their account:',
+              ),
               const SizedBox(height: AppSpacing.md),
               SelectableText(
                 code,
@@ -248,64 +282,6 @@ class FamilyMembersScreen extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not create invite: $e')));
-      }
-    }
-  }
-
-  Future<void> _addChild(BuildContext context, WidgetRef ref, AppUser me) async {
-    final nameController = TextEditingController();
-    final yearController = TextEditingController();
-    final pinController = TextEditingController();
-    final proceed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add a child'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(hintText: 'Child\'s name'),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextField(
-              controller: yearController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(hintText: 'Birth year (optional)'),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextField(
-              controller: pinController,
-              keyboardType: TextInputType.number,
-              obscureText: true,
-              maxLength: 4,
-              decoration: const InputDecoration(hintText: '4-digit device PIN (optional)'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Add')),
-        ],
-      ),
-    );
-    if (proceed != true || !context.mounted) return;
-    if (nameController.text.trim().isEmpty) return;
-    try {
-      await ref.read(authRepositoryProvider).createChildAccount(
-            displayName: nameController.text.trim(),
-            birthYear: int.tryParse(yearController.text.trim()),
-            pin: pinController.text.trim().isEmpty ? null : pinController.text.trim(),
-          );
-      ref.invalidate(familyMembersProvider);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${nameController.text.trim()} added to your family.')),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not add child: $e')));
       }
     }
   }
