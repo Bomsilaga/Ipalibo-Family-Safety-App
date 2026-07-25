@@ -427,3 +427,65 @@ which provider to switch on in Supabase → Authentication → Providers
 instead. The Google "G" is painted in Dart (`_GoogleGlyph`) in its four
 brand colours; Material's `Icons.g_mobiledata` is a single-colour glyph
 that reads as a generic letter rather than as Google.
+
+## Android
+
+### Release manifest was missing `INTERNET` (and every runtime permission)
+
+Flutter's project template declares `android.permission.INTERNET` only in
+`android/app/src/debug/AndroidManifest.xml` and the `profile/` one, on the
+reasoning that release apps should opt in deliberately. The practical
+effect is that the **release APK shipped with no network access at all** —
+every Supabase call fails, so the app opens to a permanently loading
+screen and nothing else. Declared it in `src/main/` so it reaches release
+builds.
+
+The same manifest was also missing every runtime permission the app's own
+features need, none of which surface until you run on a device:
+`ACCESS_FINE_LOCATION` + `ACCESS_COARSE_LOCATION` (Live Location check-ins
+and SOS — COARSE is declared alongside FINE because Android 12+ lets a
+user grant approximate-only, and the app must still work then), `CAMERA` +
+`RECORD_AUDIO` + `MODIFY_AUDIO_SETTINGS` (calls and photo attachments),
+and `POST_NOTIFICATIONS` (reminders on Android 13+). Camera is declared
+`uses-feature ... required="false"` so a device without one can still
+install and use everything else.
+
+### Calls now work on Android — WebView, still no Daily SDK
+
+The previous note here said native calling needed Daily's Flutter SDK and
+`call_view_stub.dart` showed a "use the web app" placeholder. That turned
+out to be unnecessary: Daily's room page is a complete prebuilt call UI,
+and loading it in a `webview_flutter` WebView gives the same experience
+the web build gets from an iframe. The stub is now a real implementation.
+
+The detail that makes or breaks it is `setOnPlatformPermissionRequest` —
+an Android WebView denies `getUserMedia` by default, so without granting
+it the room loads and looks fine but the camera and microphone stay dead,
+which is indistinguishable from a broken call. `setMediaPlaybackRequires
+UserGesture(false)` is also needed or the other participant's audio
+doesn't start until the user taps the video.
+
+### Android items still outstanding (need a device or console access)
+
+- **Maps SDK for Android is a separate API from Maps JavaScript API.**
+  Enabling the latter (which fixed the web map) does *not* enable the
+  former, so the Live Location map will fail on Android until "Maps SDK
+  for Android" is enabled on the same Google Cloud project. The key also
+  needs an Android restriction (package `com.theipalibos.ipalibos` +
+  signing SHA-1) or no restriction — an HTTP-referrer restriction, which
+  is what a web key wants, rejects Android calls.
+- **Push notifications don't work.** `firebase_messaging` is a dependency
+  but is never initialised anywhere in `lib/`, and there is no
+  `android/app/google-services.json`. Reminders currently rely on
+  `flutter_local_notifications` (device-local scheduling) only; true push
+  needs a Firebase project wired up.
+- **Invite links open the browser, not the app.** The emailed link is
+  `https://…/#/join?code=…`; opening the app instead needs an
+  App Links intent-filter plus a hosted `.well-known/assetlinks.json`
+  containing the release signing certificate's SHA-256. The `#` fragment
+  also means go_router's native (non-hash) routing wouldn't see the path,
+  so the link format needs revisiting at the same time. Not attempted
+  because none of it can be verified without a device.
+- **The APK is signed with the debug key.** `android/app/build.gradle.kts`
+  still uses `signingConfigs.debug` for release. Fine for sideloading to
+  try it out; a Play Store upload needs a real keystore.
