@@ -389,3 +389,41 @@ Dart runs. Enabling Google in Supabase Auth → Providers (needs a Google
 Cloud OAuth client) is what turns on true one-tap sign-in. The invite
 `redirectTo` URL must also be present in Auth → URL Configuration →
 Redirect URLs, or Supabase silently falls back to the Site URL.
+
+### Family: removing a member detaches rather than deletes
+
+`01-product-spec.md` §15 lists "manage members" as parent-only. Added the
+`remove-member` Edge Function (parent-only, verified server-side) behind
+a "Remove from family" action in each member's options sheet.
+
+It sets `users.family_id = null` instead of deleting the row.
+`public.users.id` is referenced by `messages.sender_id`,
+`task_assignees`, `task_completions`, `reward_ledger` and others, so a
+hard delete either trips a foreign key or takes family history with it —
+a chore someone completed last month should still show who completed it.
+Nulling `family_id` makes `current_family_id()` return null for them, so
+every family-scoped RLS policy stops matching and their access ends
+immediately, which is the actual requirement.
+
+Three things *are* deleted rather than detached: `chat_members` (so they
+stop receiving family chat), `devices` (push tokens live there — leaving
+them would keep delivering family notifications to someone no longer in
+the family), and `locations` (GPS history is the most sensitive residue,
+and holding it after removal fails the child-privacy bar in CLAUDE.md:
+data minimisation, deletable data). No "last parent" guard is needed —
+the caller is a parent, can't target themselves, and stays.
+
+### Auth: Google/Apple buttons always render, enablement checked on tap
+
+Previously the social buttons were hidden unless `/auth/v1/settings`
+reported the provider enabled, which meant the brand mockup's "Continue
+with Google" simply never appeared (the project has `google: false`).
+They now always render, matching the mockup, and `_oAuthSignIn` checks
+enablement *before* calling `signInWithOAuth` — on web that call is a
+top-level browser redirect that fires before any Dart runs, so a
+disabled provider would otherwise dump the user on Supabase's raw JSON
+error page with no exception to catch. When it's off, the screen says
+which provider to switch on in Supabase → Authentication → Providers
+instead. The Google "G" is painted in Dart (`_GoogleGlyph`) in its four
+brand colours; Material's `Icons.g_mobiledata` is a single-colour glyph
+that reads as a generic letter rather than as Google.

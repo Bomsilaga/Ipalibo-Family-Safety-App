@@ -150,10 +150,62 @@ class FamilyMembersScreen extends ConsumerWidget {
                 padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
                 child: Text('Co-parent — role management coming soon.'),
               ),
+            if (isParentViewer) ...[
+              const Divider(height: 1),
+              ListTile(
+                leading: Icon(Icons.person_remove_outlined, color: context.appColors.danger),
+                title: Text(
+                  'Remove from family',
+                  style: TextStyle(color: context.appColors.danger),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _confirmRemoveMember(context, ref, member);
+                },
+              ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _confirmRemoveMember(BuildContext context, WidgetRef ref, AppUser member) async {
+    final colors = context.appColors;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Remove ${member.displayName}?'),
+        content: Text(
+          'They lose access to your family\'s calendar, tasks, chat and location straight away, '
+          'and their location history and notifications are deleted.\n\n'
+          'Shared history — messages they sent, chores they completed — stays. '
+          'You can invite them back at any time.',
+          style: context.appTypography.body,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Remove', style: TextStyle(color: colors.danger)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      await ref.read(familyInviteRepositoryProvider).removeMember(member.id);
+      ref.invalidate(familyMembersProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${member.displayName} removed from your family.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
   }
 
   /// One dialog for both roles — a parent and a child join a family the
