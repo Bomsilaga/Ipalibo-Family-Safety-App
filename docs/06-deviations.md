@@ -305,6 +305,27 @@ hashes and stores the PIN; a "Set PIN" action was added next to each
 child in `/switch-profile` since PIN entry wasn't previously exposed
 anywhere post-creation.
 
+### Auth: "Add a child" redone as an invite code, not a parent-created account
+
+Superseded per explicit request. The original "Add a child" flow (parent
+fills in name/birth year/PIN, `create-child-account` mints an account
+with a synthetic `child.<uuid>@device.theipalibos.internal` email) is
+still deployed but no longer reachable from the UI — a child's own email
+is now the identity, matching how a co-parent joins.
+
+"Add a child" in the Family tab now calls the exact same
+`FamilyInviteRepository.createInvite` a co-parent invite uses, just with
+`role: 'child'` — the backend already supported this generically
+(`accept-invite` assigns whatever role the invite row carries, it never
+hardcoded 'parent'). The child creates their own account with their own
+email on the sign-in screen, then redeems the code via
+`/family-setup`'s existing "I have an invite code" branch — no new
+screen needed, one flow now serves both roles. The device-PIN
+(`child-sign-in`, `setChildPin`, `/switch-profile`) flow described above
+still exists for shared-device switching, but is now something a parent
+opts into per child from the Family tab's member options sheet, not
+how a child account is created.
+
 ### Auth: phone sign-in and MFA not yet wired; PIN/biometric gate done
 
 Email/password, Apple, and Google sign-in are implemented. The device
