@@ -112,20 +112,45 @@ Deno.serve(async (req) => {
   if (inviteError) return json(500, { error: inviteError.message });
 
   // Best-effort — the invite is already valid and shareable without it.
-  let emailed = false;
+  //
+  // Sending is raced against a short timeout rather than simply awaited:
+  // Supabase's SMTP round trip regularly took 6-10s, and the parent was
+  // left staring at a spinner that whole time even though the code and
+  // link were ready almost immediately. If the send lands inside the
+  // window we can still report truthfully whether it worked; if it
+  // doesn't, we hand it to waitUntil so it completes after the response
+  // and return emailed: null, meaning "still sending".
+  let emailed: boolean | null = null;
   let emailError: string | null = null;
-  try {
-    const { error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo: link });
-    if (error) {
-      emailError = error.message;
-    } else {
-      emailed = true;
+  const sending = admin.auth.admin
+    .inviteUserByEmail(email, { redirectTo: link })
+    .then(({ error }: { error: { message: string } | null }) => {
+      emailed = !error;
+      if (error) emailError = error.message;
+    })
+    .catch((e: unknown) => {
+      emailed = false;
+      emailError = `${e}`;
+    });
+
+  const outcome = await Promise.race([
+    sending.then(() => 'sent'),
+    new Promise((resolve) => setTimeout(() => resolve('pending'), 2500)),
+  ]);
+  if (outcome === 'pending') {
+    // Keeps the function alive past the response so the email still goes.
+    try {
+      (globalThis as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } })
+        .EdgeRuntime?.waitUntil(sending);
+    } catch (_) {
+      // Not fatal: worst case the send is cut short and the parent still
+      // has the link to share.
     }
-  } catch (e) {
-    emailError = `${e}`;
   }
 
-  await admin.from('audit_log').insert({
+  // Not awaited for the same reason — the parent doesn't need to wait on
+  // bookkeeping to see their invite link.
+  const audit = admin.from('audit_log').insert({
     family_id: caller.family_id,
     actor_id: caller.id,
     action: 'member_invited',
@@ -133,6 +158,12 @@ Deno.serve(async (req) => {
     target_id: invite.id,
     metadata: { role, emailed },
   });
+  try {
+    (globalThis as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } })
+      .EdgeRuntime?.waitUntil(audit);
+  } catch (_) {
+    await audit;
+  }
 
   return json(200, { code, link, email, role, emailed, email_error: emailError });
 });

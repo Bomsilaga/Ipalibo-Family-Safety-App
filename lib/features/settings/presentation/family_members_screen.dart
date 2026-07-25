@@ -301,16 +301,24 @@ class FamilyMembersScreen extends ConsumerWidget {
     return showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(result.emailed ? 'Invite sent' : 'Invite ready to share'),
+        title: Text(switch (result.emailed) {
+          true => 'Invite sent',
+          false => 'Invite ready to share',
+          null => 'Invite created',
+        }),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              result.emailed
-                  ? 'We emailed ${result.email}. They tap the link and they\'re in — no code to type.'
-                  : 'We couldn\'t email ${result.email} right now, so send them this link instead. It adds them to your family when they open it.',
-            ),
+            Text(switch (result.emailed) {
+              true => 'We emailed ${result.email}. They tap the link and they\'re in — no code to type.',
+              false =>
+                'We couldn\'t email ${result.email} right now, so send them this link instead. It adds them to your family when they open it.',
+              // Still sending — don't claim it arrived, don't claim it
+              // failed. The link works either way.
+              null =>
+                'We\'re emailing ${result.email} now. You can also send them this link yourself — it adds them to your family when they open it.',
+            }),
             const SizedBox(height: AppSpacing.md),
             SelectableText(result.link, style: context.appTypography.small),
             const SizedBox(height: AppSpacing.md),
