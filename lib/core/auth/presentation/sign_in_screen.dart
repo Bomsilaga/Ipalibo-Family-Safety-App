@@ -2,15 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../features/settings/data/pending_invite.dart';
 import '../../network/auth_settings.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../auth_providers.dart';
+import 'brand_crest.dart';
 
-/// Auth screen: ivory background, emerald headline, pill inputs, gold
-/// primary button, outlined social sign-in (docs/04-design-system.md).
+/// Auth screen, laid out to the brand mockup: crest + wordmark header,
+/// "Welcome Back", pill inputs, emerald primary button, "or continue
+/// with" divider and outlined social buttons.
+///
+/// Opens in sign-up mode when reached as `/sign-in?mode=signup` (the
+/// welcome screen's "Get Started"), sign-in mode otherwise.
 class SignInScreen extends ConsumerStatefulWidget {
-  const SignInScreen({super.key});
+  const SignInScreen({super.key, this.startInSignUp = false});
+
+  final bool startInSignUp;
 
   @override
   ConsumerState<SignInScreen> createState() => _SignInScreenState();
@@ -20,7 +28,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _isSignUp = false;
+  late bool _isSignUp = widget.startInSignUp;
   bool _isSubmitting = false;
   bool _obscurePassword = true;
   String? _errorMessage;
@@ -119,26 +127,70 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final typography = context.appTypography;
+    final pendingInvite = ref.watch(pendingInviteCodeProvider).value;
     return Scaffold(
       backgroundColor: colors.ivory,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.lg),
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.lg),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: AppSpacing.xxl),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.chevron_left, color: colors.emerald900),
+                      onPressed: () => context.go('/welcome'),
+                    ),
+                    const Spacer(),
+                    Column(
+                      children: [
+                        BrandCrest(size: 30),
+                        const SizedBox(height: 4),
+                        const BrandWordmark(fontSize: 11),
+                      ],
+                    ),
+                    const Spacer(),
+                    const SizedBox(width: 48),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                // An invitee who followed a link arrives here needing to
+                // make an account first — say why, so the detour makes
+                // sense and they don't drop out.
+                if (pendingInvite != null && pendingInvite.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+                    decoration: BoxDecoration(
+                      color: colors.emerald700.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(AppSpacing.radiusMedium),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.family_restroom_outlined, color: colors.emerald700),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            'You\'ve been invited to a family. Create an account (or sign in) and we\'ll add you automatically.',
+                            style: typography.small.copyWith(color: colors.emerald900),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 Text(
-                  _isSignUp ? 'Create your account' : 'Welcome back',
+                  _isSignUp ? 'Create your account' : 'Welcome Back',
+                  textAlign: TextAlign.center,
                   style: typography.title.copyWith(color: colors.emerald900),
                 ),
-                const SizedBox(height: AppSpacing.sm),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
-                  _isSignUp
-                      ? 'Set up your family\'s command centre.'
-                      : 'Sign in to The Ipalibos.',
+                  _isSignUp ? 'Set up your family\'s command centre.' : 'Sign in to continue',
+                  textAlign: TextAlign.center,
                   style: typography.body.copyWith(color: colors.gray[6]),
                 ),
                 const SizedBox(height: AppSpacing.xl),
@@ -171,8 +223,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   const SizedBox(height: AppSpacing.md),
                   Text(_infoMessage!, style: typography.small.copyWith(color: colors.emerald700)),
                 ],
-                if (!_isSignUp) ...[
-                  const SizedBox(height: AppSpacing.sm),
+                if (!_isSignUp)
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
@@ -180,32 +231,22 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                       child: const Text('Forgot password?'),
                     ),
                   ),
-                ],
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.md),
                 ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colors.emerald900,
+                    foregroundColor: colors.ivory,
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                    textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
                   onPressed: _isSubmitting ? null : _submit,
                   child: _isSubmitting
                       ? const SizedBox(
                           width: 18,
                           height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
                       : Text(_isSignUp ? 'Get Started' : 'Sign In'),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                TextButton(
-                  onPressed: _isSubmitting
-                      ? null
-                      : () => setState(() {
-                            _isSignUp = !_isSignUp;
-                            _errorMessage = null;
-                            _infoMessage = null;
-                          }),
-                  child: Text(
-                    _isSignUp
-                        ? 'Already have an account? Sign in'
-                        : 'New family? Create an account',
-                  ),
                 ),
                 // On web, tapping a disabled OAuth provider does a full
                 // top-level browser redirect straight to Supabase before
@@ -227,8 +268,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                         Expanded(child: Divider(color: colors.gray[3])),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                          child:
-                              Text('or', style: typography.small.copyWith(color: colors.gray[5])),
+                          child: Text('or continue with',
+                              style: typography.small.copyWith(color: colors.gray[5])),
                         ),
                         Expanded(child: Divider(color: colors.gray[3])),
                       ]),
@@ -243,12 +284,27 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                       if (showGoogle)
                         OutlinedButton.icon(
                           onPressed: _isSubmitting ? null : () => _oAuthSignIn(isApple: false),
-                          icon: const Icon(Icons.g_mobiledata),
+                          icon: const Icon(Icons.g_mobiledata, size: 28),
                           label: const Text('Continue with Google'),
                         ),
                     ],
                   );
                 }),
+                const SizedBox(height: AppSpacing.md),
+                TextButton(
+                  onPressed: _isSubmitting
+                      ? null
+                      : () => setState(() {
+                            _isSignUp = !_isSignUp;
+                            _errorMessage = null;
+                            _infoMessage = null;
+                          }),
+                  child: Text(
+                    _isSignUp
+                        ? 'Already have an account? Sign in'
+                        : 'Don\'t have an account? Sign up',
+                  ),
+                ),
               ],
             ),
           ),

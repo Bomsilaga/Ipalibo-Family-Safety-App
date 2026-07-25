@@ -7,6 +7,7 @@ import '../auth/presentation/family_setup_screen.dart';
 import '../auth/presentation/lock_screen.dart';
 import '../auth/presentation/sign_in_screen.dart';
 import '../auth/presentation/splash_screen.dart';
+import '../auth/presentation/welcome_screen.dart';
 import '../../features/ai_assistant/presentation/daily_briefing_screen.dart';
 import '../../features/calendar/presentation/calendar_screen.dart';
 import '../../features/chat/presentation/call_screen.dart';
@@ -19,6 +20,7 @@ import '../../features/reports/presentation/reports_screen.dart';
 import '../../features/rewards/presentation/rewards_screen.dart';
 import '../../features/settings/presentation/family_members_screen.dart';
 import '../../features/settings/presentation/family_settings_screen.dart';
+import '../../features/settings/presentation/join_invite_screen.dart';
 import '../../features/settings/presentation/more_screen.dart';
 import '../../features/settings/presentation/security_settings_screen.dart';
 import '../../features/settings/presentation/switch_profile_screen.dart';
@@ -53,14 +55,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // /splash is a transient landing spot only — it must always redirect
       // onward, never be a place a visitor can get stuck.
       if (state.matchedLocation == '/splash') {
-        return isSignedIn ? '/home' : '/sign-in';
+        return isSignedIn ? '/home' : '/welcome';
       }
 
-      final goingToAuth =
-          state.matchedLocation == '/sign-in' || state.matchedLocation == '/family-setup';
+      // /join is the invite-link landing spot and must stay reachable
+      // while signed out — bouncing it away would throw out the code in
+      // the URL before JoinInviteScreen ever stores it.
+      final goingToAuth = state.matchedLocation == '/sign-in' ||
+          state.matchedLocation == '/welcome' ||
+          state.matchedLocation == '/family-setup' ||
+          state.matchedLocation == '/join';
 
       if (!isSignedIn) {
-        return goingToAuth ? null : '/sign-in';
+        return goingToAuth ? null : '/welcome';
       }
 
       // A Supabase auth session alone isn't the full picture: the caller
@@ -74,7 +81,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final hasProfile = await ref.read(currentAppUserProvider.future) != null;
 
       if (!hasProfile) {
-        return state.matchedLocation == '/family-setup' ? null : '/family-setup';
+        // /join is allowed through for the same reason as above: it has to
+        // store the invite code before handing off to /family-setup, which
+        // then finds it and joins them automatically.
+        final onOnboarding =
+            state.matchedLocation == '/family-setup' || state.matchedLocation == '/join';
+        return onOnboarding ? null : '/family-setup';
       }
       if (goingToAuth) return '/home';
       return null;
@@ -82,8 +94,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
       GoRoute(path: '/lock', builder: (context, state) => const LockScreen()),
-      GoRoute(path: '/sign-in', builder: (context, state) => const SignInScreen()),
+      GoRoute(path: '/welcome', builder: (context, state) => const WelcomeScreen()),
+      GoRoute(
+        path: '/sign-in',
+        builder: (context, state) =>
+            SignInScreen(startInSignUp: state.uri.queryParameters['mode'] == 'signup'),
+      ),
       GoRoute(path: '/family-setup', builder: (context, state) => const FamilySetupScreen()),
+      GoRoute(
+        path: '/join',
+        builder: (context, state) =>
+            JoinInviteScreen(code: state.uri.queryParameters['code']),
+      ),
       GoRoute(
         path: '/gps',
         builder: (context, state) => const SecondaryScreenShell(highlightedTabIndex: 5, child: GpsScreen()),

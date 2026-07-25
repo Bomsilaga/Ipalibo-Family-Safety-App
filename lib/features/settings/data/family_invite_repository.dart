@@ -48,6 +48,37 @@ class FamilyInviteRepository {
     return code;
   }
 
+  /// One-step invite: the `invite-member` Edge Function mints the code,
+  /// records it, and emails the invitee a link that both confirms their
+  /// address and signs them in, landing on `/join?code=…` where the app
+  /// redeems it automatically. Returns the shareable link too, because
+  /// built-in Supabase SMTP is rate-limited and email delivery is
+  /// best-effort — see [InviteResult.emailed].
+  Future<InviteResult> inviteMember({
+    required String email,
+    required String role,
+  }) async {
+    final response = await _client.functions.invoke(
+      'invite-member',
+      body: {'email': email.trim(), 'role': role},
+    );
+    if (response.status != 200) {
+      final data = response.data;
+      final message = data is Map && data['error'] != null
+          ? '${data['error']}'
+          : 'Could not create invite (${response.status}).';
+      throw StateError(message);
+    }
+    final data = response.data as Map<String, dynamic>;
+    return InviteResult(
+      code: data['code'] as String,
+      link: data['link'] as String,
+      email: data['email'] as String? ?? email.trim(),
+      emailed: data['emailed'] == true,
+      emailError: data['email_error'] as String?,
+    );
+  }
+
   /// Redeems an invite code for the signed-in (but not-yet-onboarded)
   /// caller, via the service-role `accept-invite` function.
   Future<void> acceptInvite({
@@ -67,6 +98,26 @@ class FamilyInviteRepository {
       throw StateError(message);
     }
   }
+}
+
+/// Outcome of [FamilyInviteRepository.inviteMember]. Always carries a
+/// working [link]/[code]; [emailed] only says whether we also managed to
+/// send the email, so the UI can offer sharing as a fallback instead of a
+/// dead end.
+class InviteResult {
+  const InviteResult({
+    required this.code,
+    required this.link,
+    required this.email,
+    required this.emailed,
+    this.emailError,
+  });
+
+  final String code;
+  final String link;
+  final String email;
+  final bool emailed;
+  final String? emailError;
 }
 
 final familyInviteRepositoryProvider = Provider<FamilyInviteRepository>((ref) {

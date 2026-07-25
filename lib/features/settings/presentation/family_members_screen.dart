@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/auth/app_user.dart';
 import '../../../core/auth/auth_providers.dart';
@@ -157,10 +158,9 @@ class FamilyMembersScreen extends ConsumerWidget {
 
   /// One dialog for both roles — a parent and a child join a family the
   /// exact same way (docs/06-deviations.md "founder bootstrap"): pick who
-  /// this is for, enter their email, get a code. No separate picker
-  /// screen, no different fields for kids — the only thing that differs
-  /// server-side is the `role` recorded on the invite row, which
-  /// `accept-invite` already honours generically.
+  /// this is for, type their email, done. The `invite-member` function
+  /// emails them a link that signs them in and drops them straight into
+  /// the family, so in the happy path nobody reads out or types a code.
   Future<void> _addFamilyMemberFlow(BuildContext context, WidgetRef ref, AppUser me) async {
     if (me.familyId == null) return;
     final emailController = TextEditingController();
@@ -188,66 +188,89 @@ class FamilyMembersScreen extends ConsumerWidget {
               TextField(
                 controller: emailController,
                 keyboardType: TextInputType.emailAddress,
+                autofocus: true,
                 decoration: const InputDecoration(hintText: 'Their email'),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'We\'ll email them a link that adds them to your family.',
+                style: context.appTypography.caption,
               ),
             ],
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Generate code')),
+            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Send invite')),
           ],
         ),
       ),
     );
-    // family_invites requires an email or phone on the row (there's no
-    // delivery mechanism yet, but it's how a parent tells invites apart).
     if (proceed != true || emailController.text.trim().isEmpty || !context.mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(child: CircularProgressIndicator()),
+    );
     try {
-      final code = await ref.read(familyInviteRepositoryProvider).createInvite(
-            familyId: me.familyId!,
-            invitedBy: me.id,
-            role: role,
+      final result = await ref.read(familyInviteRepositoryProvider).inviteMember(
             email: emailController.text.trim(),
+            role: role,
           );
       if (!context.mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Invite code ready'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                role == 'child'
-                    ? 'Share this code with them. On their own device, they\'ll create an account with their email, then enter this code to join your family:'
-                    : 'Share this code with them. They\'ll enter it after creating their account:',
-              ),
-              const SizedBox(height: AppSpacing.md),
-              SelectableText(
-                code,
-                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 4),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text('Expires in 7 days.', style: context.appTypography.caption),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: code));
-                ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Code copied')));
-              },
-              child: const Text('Copy'),
+      Navigator.pop(context); // dismiss the spinner
+      await _showInviteResult(context, result);
+    } catch (e) {
+      if (!context.mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not send invite: $e')));
+    }
+  }
+
+  /// Always offers the link, even on a successful send: Supabase's
+  /// built-in SMTP is rate-limited, so "sent" isn't the same as
+  /// "arrived", and a parent standing next to their kid would rather just
+  /// share it directly anyway.
+  Future<void> _showInviteResult(BuildContext context, InviteResult result) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(result.emailed ? 'Invite sent' : 'Invite ready to share'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              result.emailed
+                  ? 'We emailed ${result.email}. They tap the link and they\'re in — no code to type.'
+                  : 'We couldn\'t email ${result.email} right now, so send them this link instead. It adds them to your family when they open it.',
             ),
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
+            const SizedBox(height: AppSpacing.md),
+            SelectableText(result.link, style: context.appTypography.small),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              'Backup code: ${result.code} · expires in 7 days',
+              style: context.appTypography.caption,
+            ),
           ],
         ),
-      );
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not create invite: $e')));
-      }
-    }
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: result.link));
+              ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Link copied')));
+            },
+            child: const Text('Copy link'),
+          ),
+          TextButton(
+            onPressed: () => SharePlus.instance.share(
+              ShareParams(text: 'Join our family on The Ipalibos: ${result.link}'),
+            ),
+            child: const Text('Share'),
+          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
+        ],
+      ),
+    );
   }
 }

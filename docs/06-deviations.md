@@ -339,3 +339,53 @@ an already-valid session) — it is not the server-side `users.pin_hash`
 flow, which remains available for a future cross-device child sign-in.
 Still open: phone OTP (needs an SMS provider) and optional parent MFA
 (Supabase Auth MFA config) — both need provider setup a human does.
+
+### Auth: one-tap invites by email; welcome screen matches the brand mockup
+
+Adding a family member (child or co-parent) is now a single step for the
+parent — type an email, tap Send invite — and a single tap for the
+invitee. The new `invite-member` Edge Function mints the code, stores
+only `sha256(code)` in `family_invites` (unchanged contract, so
+`accept-invite` validates it exactly as before), and calls the Admin
+API's `inviteUserByEmail` with `redirectTo` pointing at
+`/#/join?code=…`. That link both confirms the address and signs the
+invitee in, so they land already authenticated on `JoinInviteScreen`,
+which stores the code and hands off to `/family-setup` — where it is
+pre-filled and their display name is pre-guessed from their email. In
+the happy path nobody reads out or types a code.
+
+Two things this deliberately does *not* assume:
+
+- **Email delivery is best-effort.** Supabase's built-in SMTP is
+  rate-limited to a handful of sends per hour and this project has no
+  custom SMTP configured, so `invite-member` returns `emailed: true|false`
+  plus the link and code regardless, and the UI always offers Copy
+  link / Share (via `share_plus`). A parent standing next to their kid
+  can just share it directly. Configuring custom SMTP in Supabase Auth
+  settings is what makes the emailed path reliable.
+- **The pending code has to survive a page reload.** If the invitee
+  signs up with a password instead of following the emailed link, they
+  leave for their inbox and return on a fresh page load, so the code is
+  persisted (`PendingInviteStore`, flutter_secure_storage) rather than
+  held in memory, and cleared as soon as it's redeemed so a stale code
+  can't attach an unrelated later sign-up on the same device to the
+  family.
+
+Also restyled the signed-out entry to the brand mockup: a new `/welcome`
+screen (emerald field, gold crest/wordmark, "Get Started" and "I already
+have an account") is now where signed-out users land instead of the bare
+form, and `/sign-in` gained the crest header, "Welcome Back" / "Sign in
+to continue" copy, and an "or continue with" divider. The crest is drawn
+in Dart (`brand_crest.dart`) rather than shipped as a PNG so it takes the
+theme's gold token and stays crisp at any size.
+
+Still needing action outside this repo: **Google and Apple OAuth are both
+disabled** on the Supabase project (`/auth/v1/settings` reports
+`google: false, apple: false`), which is why the mockup's "Continue with
+Google/Apple" buttons don't render — the sign-in screen deliberately
+hides a provider until the project reports it enabled, because on web a
+disabled provider redirects to Supabase's raw JSON error page before any
+Dart runs. Enabling Google in Supabase Auth → Providers (needs a Google
+Cloud OAuth client) is what turns on true one-tap sign-in. The invite
+`redirectTo` URL must also be present in Auth → URL Configuration →
+Redirect URLs, or Supabase silently falls back to the Site URL.
