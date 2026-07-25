@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/auth/app_lock_service.dart';
+import 'core/auth/auth_providers.dart';
 import 'core/network/supabase_client.dart';
 import 'core/routing/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'features/parental_controls/data/device_repository.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -75,13 +77,39 @@ class IpalibosApp extends ConsumerStatefulWidget {
   ConsumerState<IpalibosApp> createState() => _IpalibosAppState();
 }
 
-class _IpalibosAppState extends ConsumerState<IpalibosApp> {
+class _IpalibosAppState extends ConsumerState<IpalibosApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Engage the PIN/biometric gate at cold start if one is configured.
     Future.microtask(
         () => ref.read(appLockStateProvider.notifier).lockIfConfigured());
+    Future.microtask(_heartbeat);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _heartbeat();
+  }
+
+  /// Tells the family this install is still alive (see
+  /// [DeviceRepository.heartbeat] — this is how a parent finds out a
+  /// child's phone has gone quiet, since no app can block its own
+  /// deletion). Cold start plus every foreground resume is frequent
+  /// enough for a 24h staleness threshold without waking the radio.
+  Future<void> _heartbeat() async {
+    final me = await ref.read(currentAppUserProvider.future);
+    if (me == null || me.familyId == null) return;
+    await ref
+        .read(deviceRepositoryProvider)
+        .heartbeat(userId: me.id, familyId: me.familyId!);
   }
 
   @override

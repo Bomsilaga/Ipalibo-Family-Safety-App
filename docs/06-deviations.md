@@ -689,31 +689,64 @@ and progress indicators, and gave every button an explicit
 `disabledForegroundColor`/`disabledBackgroundColor` so a genuinely
 disabled control now looks different from an active one.
 
-### Uninstall protection for child devices: NOT implemented, needs a decision
+### Uninstall protection: OS-level guidance + heartbeat, not app-level blocking
 
-Requested: a child must not be able to uninstall the app. This cannot be
-done from this repo, and the two platforms differ sharply:
+Requested: a child must not be able to uninstall the app. The direct
+version of that is not buildable, so it was built the way it actually
+works.
 
-- **iOS — not possible as a normal App Store app, at any price.** There
-  is no API that prevents deletion of your own app. The only mechanisms
-  are Screen Time's "Don't Allow Deleting Apps" restriction, which the
-  *parent* sets on the child's device behind a Screen Time passcode
-  (outside our app entirely, though we can guide them to it), or
-  enrolling the device in an MDM/Apple Business Manager supervision
-  programme, which is not appropriate for a family app and would fail
-  review as a consumer product. Attempting to block deletion would breach
-  CLAUDE.md's "Family Controls / Screen Time API only" rule.
-- **Android — technically possible, with real cost.** A Device Admin
-  receiver blocks uninstall while admin is active, but the child can
-  revoke admin in Settings unless we also become device owner (which
-  requires factory-reset provisioning). Google Play additionally
-  restricts the `Device Admin` deprecation path and reviews family apps
-  against the Families policy; a self-protecting, hard-to-remove app is
-  exactly the pattern Play's stalkerware policy targets, so this needs a
-  careful policy read before any code lands.
+**Why not blocking.** On iOS there is no API that prevents deletion of
+your own app, at any price tier. The only mechanisms are Screen Time's
+"Don't Allow Deleting Apps", which a parent sets on the child's device
+behind a Screen Time passcode, or MDM/Apple Business Manager supervision,
+which is not appropriate for a consumer family app and would fail review.
+Attempting to block deletion in-app would also breach CLAUDE.md's
+"Family Controls / Screen Time API only" rule. On Android a Device Admin
+receiver can block uninstall, but the child can revoke admin in Settings
+unless the app becomes device owner (factory-reset provisioning), and a
+self-protecting, hard-to-remove app is precisely the pattern Google
+Play's stalkerware policy targets in family apps.
 
-Per CLAUDE.md ("ask before starting device-restriction code — these need
-platform entitlements a human has to do outside this repo first"), this
-is left unimplemented pending a decision on: Android Device Admin vs
-guided Screen Time setup only, and who does the Play Families policy
-review.
+**What was built instead**, in `features/parental_controls`:
+
+1. **Guided lockdown** (`device_protection_screen.dart`) — a parent picks
+   the child and platform and gets the exact step sequence for iOS Screen
+   Time or Android Family Link, ending in a verification step ("press and
+   hold the icon — there should be no Remove App"). Confirming stores an
+   attestation in `device_restrictions` with
+   `restriction_type = 'uninstall_protection'`, plus an `audit_log` entry.
+   It is explicitly an attestation, not enforcement: the switch lives in
+   the OS and the app cannot read it back. The sheet says so, including
+   the caveats (a child who knows the Screen Time passcode can undo it; a
+   factory reset clears either platform).
+
+   Steps are written out rather than deep-linked into Settings —
+   deep-link schemes for these panes are undocumented, differ per OS
+   version, and silently no-op when they change, and a parent following
+   steps that go nowhere is worse than one reading accurate ones.
+
+2. **Heartbeat** (`device_repository.dart`, migration
+   `20260725000005`) — every install upserts a `devices` row on cold
+   start and on every foreground resume. A device quiet for more than 24h
+   is flagged on the Device protection screen and in a banner on the
+   parent's Home. This is the part that actually covers the requirement:
+   it catches deletion, but equally a phone switched off, force-stopped,
+   or with permissions revoked — none of which blocking would have caught.
+
+   The 24h threshold is deliberately generous; a phone off overnight or
+   out of signal all day is normal, and an alert that cries wolf is one a
+   parent learns to ignore. The copy says "may have been removed, or the
+   phone is off" rather than accusing the child, because from the
+   server's side those are indistinguishable.
+
+   `install_id` is a random value minted per install and kept in secure
+   storage — deliberately not a hardware identifier, which both stores
+   restrict and which is the sort of data-minimisation problem CLAUDE.md
+   flags for child accounts. It resets on reinstall, which is the signal
+   we want anyway.
+
+**Still not done:** the stale-device alert is in-app only. Pushing it
+takes the FCM service account that is already outstanding above
+("Notifications: FCM delivery needs the Firebase service account"), and a
+scheduled job to evaluate staleness server-side rather than when a parent
+happens to open the app.

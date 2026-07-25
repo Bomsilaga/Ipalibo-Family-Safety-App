@@ -22,6 +22,7 @@ class MoreScreen extends ConsumerWidget {
       _MoreItem('Rewards', Icons.emoji_events_outlined, '/rewards'),
       _MoreItem('Reports', Icons.bar_chart_outlined, '/reports'),
       _MoreItem('Unlock Requests', Icons.lock_open_outlined, '/unlock-requests'),
+      _MoreItem('Device Protection', Icons.shield_outlined, '/device-protection'),
       _MoreItem('Notifications', Icons.notifications_none_outlined, '/notifications'),
       _MoreItem('Family Settings', Icons.settings_outlined, '/family-settings'),
       _MoreItem('Security & App Lock', Icons.fingerprint, '/security'),

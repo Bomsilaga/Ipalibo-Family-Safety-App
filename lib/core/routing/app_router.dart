@@ -15,6 +15,7 @@ import '../../features/chat/presentation/chat_screen.dart';
 import '../../features/gps/presentation/gps_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/notifications/presentation/notification_inbox_screen.dart';
+import '../../features/parental_controls/presentation/device_protection_screen.dart';
 import '../../features/parental_controls/presentation/unlock_requests_screen.dart';
 import '../../features/reports/presentation/reports_screen.dart';
 import '../../features/rewards/presentation/rewards_screen.dart';
@@ -121,6 +122,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/reports',
         builder: (context, state) => const SecondaryScreenShell(highlightedTabIndex: 5, child: ReportsScreen()),
+      ),
+      GoRoute(
+        path: '/device-protection',
+        builder: (context, state) =>
+            const SecondaryScreenShell(highlightedTabIndex: 5, child: DeviceProtectionScreen()),
       ),
       GoRoute(
         path: '/unlock-requests',

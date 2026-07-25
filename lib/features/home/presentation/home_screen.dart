@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/auth/app_user.dart';
 import '../../../core/auth/auth_providers.dart';
+import '../../../core/auth/user_role.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../widgets/empty_state.dart';
 import '../../calendar/data/calendar_repository.dart';
+import '../../parental_controls/data/device_repository.dart';
 import '../../parental_controls/data/unlock_repository.dart';
+import '../../parental_controls/domain/device_model.dart';
 import '../../tasks/data/tasks_repository.dart';
 import '../../tasks/domain/task_model.dart';
 
@@ -71,6 +75,7 @@ class HomeScreen extends ConsumerWidget {
                 style: typography.body.copyWith(color: colors.gray[6]),
               ),
               const SizedBox(height: AppSpacing.lg),
+              const _QuietDeviceBanner(),
               Row(
                 children: [
                   Expanded(
@@ -153,6 +158,64 @@ class HomeScreen extends ConsumerWidget {
                 for (final t in todaysTasks) _HomeTaskTile(task: t),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Surfaces a child's device that has stopped checking in.
+///
+/// This is the practical half of "the child shouldn't be able to
+/// uninstall the app": no app can prevent its own deletion, so instead a
+/// parent finds out promptly when a device goes quiet — which also covers
+/// a phone that's off, force-stopped, or out of battery. Renders nothing
+/// at all when everything is checking in, so it never becomes wallpaper
+/// the parent learns to scroll past.
+class _QuietDeviceBanner extends ConsumerWidget {
+  const _QuietDeviceBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final me = ref.watch(currentAppUserProvider).value;
+    if (me == null || me.role != UserRole.parent) return const SizedBox.shrink();
+
+    final devices = ref.watch(familyDevicesProvider).value ?? const <FamilyDevice>[];
+    final members = {
+      for (final m in ref.watch(familyMembersProvider).value ?? <AppUser>[]) m.id: m,
+    };
+    // A parent's own phone is in this list too; them being the one holding
+    // it means it is self-evidently fine.
+    final quiet = devices
+        .where((d) => d.isStale && d.userId != me.id && members[d.userId]?.role == UserRole.child)
+        .toList();
+    if (quiet.isEmpty) return const SizedBox.shrink();
+
+    final colors = context.appColors;
+    final typography = context.appTypography;
+    final names = quiet
+        .map((d) => members[d.userId]?.displayName)
+        .whereType<String>()
+        .toSet()
+        .join(', ');
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: Card(
+        color: colors.warning.withValues(alpha: 0.12),
+        child: ListTile(
+          leading: Icon(Icons.phonelink_erase_outlined, color: colors.warning),
+          title: Text(
+            quiet.length == 1 ? '$names\'s phone has gone quiet' : 'Some phones have gone quiet',
+            style: typography.body.copyWith(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            'No check-in for over a day from $names. The app may have been removed, '
+            'or the phone is off.',
+            style: typography.small.copyWith(color: colors.gray[7]),
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => context.push('/device-protection'),
         ),
       ),
     );
