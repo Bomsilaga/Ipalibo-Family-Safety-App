@@ -60,6 +60,9 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: colors.gold500,
           foregroundColor: colors.emerald900,
+          disabledBackgroundColor: colors.gray[2],
+          disabledForegroundColor: colors.disabled,
+          elevation: AppSpacing.elevations[1],
           textStyle: typography.body.copyWith(fontWeight: FontWeight.w600),
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.lg,
@@ -73,7 +76,9 @@ class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: colors.emerald900,
-          side: BorderSide(color: colors.emerald900),
+          side: BorderSide(color: colors.emerald900, width: 1.5),
+          disabledForegroundColor: colors.disabled,
+          textStyle: typography.body.copyWith(fontWeight: FontWeight.w600),
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.lg,
             vertical: AppSpacing.md,
@@ -83,6 +88,73 @@ class AppTheme {
           ),
         ),
       ),
+      // Text buttons carry most of the app's tappable text — dialog
+      // actions, "Send invite", "Forgot password", the links on the
+      // welcome screen. Left on Material's defaults they inherit a near
+      // black emerald900 at regular weight, which is indistinguishable
+      // from body copy: the controls looked greyed out/disabled even
+      // though they were live. Emerald700 at w600 reads as "tap me",
+      // and disabled state now has somewhere lower to go.
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: colors.emerald700,
+          disabledForegroundColor: colors.disabled,
+          textStyle: typography.body.copyWith(fontWeight: FontWeight.w600),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+          ),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: colors.emerald700,
+          foregroundColor: colors.white,
+          disabledBackgroundColor: colors.gray[2],
+          disabledForegroundColor: colors.disabled,
+          textStyle: typography.body.copyWith(fontWeight: FontWeight.w600),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusPill),
+          ),
+        ),
+      ),
+      // Same problem in icon form: bare IconButtons defaulted to the
+      // muted onSurfaceVariant grey.
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          foregroundColor: colors.emerald700,
+          disabledForegroundColor: colors.disabled,
+        ),
+      ),
+      listTileTheme: ListTileThemeData(
+        iconColor: colors.emerald700,
+        textColor: colors.gray[8],
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: colors.gold500,
+        foregroundColor: colors.emerald900,
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? colors.white : colors.gray[4],
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? colors.emerald500 : colors.gray[2],
+        ),
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected) ? colors.emerald700 : null,
+        ),
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: colors.emerald500),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: colors.white,

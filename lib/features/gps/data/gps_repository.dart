@@ -17,20 +17,34 @@ class GpsRepository {
 
   final SupabaseClient _client;
 
-  /// Latest position per family member (RLS: children see only their own
-  /// row come back; parents see everyone).
-  Future<Map<String, MemberLocation>> latestPerMember() async {
-    final rows = await _client
+  /// Latest position per family member, live (RLS: children see only their
+  /// own row come back; parents see everyone).
+  ///
+  /// A stream rather than a fetch so "Live Location" is actually live —
+  /// when a family member checks in, every other device updates without
+  /// anyone reopening the screen. `public.locations` is in the realtime
+  /// publication as of migration 20260725000004.
+  ///
+  /// `.stream()` can't do the ordering server-side here, so it pulls the
+  /// family's rows (already family-scoped by RLS) and reduces to the most
+  /// recent row per member client-side.
+  Stream<Map<String, MemberLocation>> latestPerMemberStream() {
+    return _client
         .from('locations')
-        .select()
+        .stream(primaryKey: ['id'])
         .order('recorded_at', ascending: false)
-        .limit(200);
-    final latest = <String, MemberLocation>{};
-    for (final r in rows as List) {
-      final loc = MemberLocation.fromJson(r as Map<String, dynamic>);
-      latest.putIfAbsent(loc.userId, () => loc);
-    }
-    return latest;
+        .limit(200)
+        .map((rows) {
+      final latest = <String, MemberLocation>{};
+      for (final r in rows) {
+        final loc = MemberLocation.fromJson(r);
+        final existing = latest[loc.userId];
+        if (existing == null || loc.recordedAt.isAfter(existing.recordedAt)) {
+          latest[loc.userId] = loc;
+        }
+      }
+      return latest;
+    });
   }
 
   /// One-tap "check in now": reads the device position (with permission
@@ -128,8 +142,8 @@ class GpsRepository {
 
 final gpsRepositoryProvider = Provider<GpsRepository>((ref) => GpsRepository(supabase));
 
-final latestLocationsProvider = FutureProvider<Map<String, MemberLocation>>((ref) async {
-  return ref.watch(gpsRepositoryProvider).latestPerMember();
+final latestLocationsProvider = StreamProvider<Map<String, MemberLocation>>((ref) {
+  return ref.watch(gpsRepositoryProvider).latestPerMemberStream();
 });
 
 final safeZonesProvider = FutureProvider<List<SafeZone>>((ref) async {

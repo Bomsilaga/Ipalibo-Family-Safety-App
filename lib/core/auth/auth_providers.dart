@@ -32,11 +32,26 @@ final currentFamilyProvider = FutureProvider<Family?>((ref) async {
   return ref.watch(authRepositoryProvider).fetchFamily(appUser!.familyId!);
 });
 
-/// Everyone in the caller's family (RLS already scopes the query — the
-/// filter here is belt-and-braces, not the security boundary).
-final familyMembersProvider = FutureProvider<List<AppUser>>((ref) async {
+/// Everyone in the caller's family, live (RLS already scopes the query —
+/// the filter here is belt-and-braces, not the security boundary).
+///
+/// This is a stream, not a one-shot fetch, because members arrive after
+/// the screen is already open: a parent sends an invite and the child
+/// accepts it minutes later on their own phone. As a FutureProvider this
+/// only re-ran when the signed-in user changed, so the new child didn't
+/// show up on the parent's device until the app was fully restarted —
+/// while appearing immediately on the child's own device, which had just
+/// loaded fresh. `public.users` is in the realtime publication as of
+/// migration 20260725000004.
+final familyMembersProvider = StreamProvider<List<AppUser>>((ref) async* {
   final appUser = await ref.watch(currentAppUserProvider.future);
-  if (appUser?.familyId == null) return const [];
-  final rows = await supabase.from('users').select().eq('family_id', appUser!.familyId!);
-  return (rows as List).map((r) => AppUser.fromJson(r as Map<String, dynamic>)).toList();
+  if (appUser?.familyId == null) {
+    yield const [];
+    return;
+  }
+  yield* supabase
+      .from('users')
+      .stream(primaryKey: ['id'])
+      .eq('family_id', appUser!.familyId!)
+      .map((rows) => rows.map(AppUser.fromJson).toList());
 });

@@ -326,7 +326,7 @@ class _MessageBubble extends ConsumerWidget {
         mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (!isMine && sender != null) ...[
+          if (sender != null && !isMine) ...[
             MemberAvatar(user: sender!, radius: 14),
             const SizedBox(width: AppSpacing.sm),
           ],
@@ -361,12 +361,23 @@ class _MessageBubble extends ConsumerWidget {
                   border: isMine ? null : Border(left: BorderSide(color: accent, width: 3)),
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                   children: [
-                    if (!isMine && sender != null)
-                      Text(sender!.displayName,
-                          style: typography.caption
-                              .copyWith(color: accent, fontWeight: FontWeight.w600)),
+                    // Named on every bubble, including your own. Only the
+                    // other side was labelled before, which made a family
+                    // thread read as if one anonymous voice was talking to
+                    // named people. On your own bubbles the label sits on
+                    // the emerald fill, so it takes an ivory tint rather
+                    // than the sender accent, which wouldn't have contrast.
+                    if (sender != null)
+                      Text(
+                        sender!.displayName,
+                        style: typography.caption.copyWith(
+                          color: isMine ? colors.ivory.withValues(alpha: 0.85) : accent,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     if (message.isDeleted)
                       Text(
                         'Message removed',

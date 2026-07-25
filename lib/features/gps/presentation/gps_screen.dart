@@ -62,7 +62,6 @@ class _FamilyTab extends ConsumerWidget {
             await ref
                 .read(gpsRepositoryProvider)
                 .checkIn(familyId: me!.familyId!, userId: me.id);
-            ref.invalidate(latestLocationsProvider);
             if (context.mounted) {
               ScaffoldMessenger.of(context)
                   .showSnackBar(const SnackBar(content: Text('Location shared with your family.')));
@@ -77,22 +76,43 @@ class _FamilyTab extends ConsumerWidget {
       body: membersAsync.when(
         data: (members) => locationsAsync.when(
           data: (locations) {
-            if (locations.isEmpty) {
+            if (members.isEmpty) {
               return const EmptyState(
                 icon: Icons.location_searching,
-                message: 'No locations yet — tap "Check in" to share yours.',
+                message: 'No family members yet — invite them from the Family tab.',
               );
             }
+            // Every member gets a row, whether or not they've ever checked
+            // in: the point of this screen is "where is everyone", and a
+            // member silently missing from the list reads as a bug, not as
+            // "they aren't sharing". Ones with a position sort to the top,
+            // freshest first.
+            final sorted = [...members]..sort((a, b) {
+                final la = locations[a.id];
+                final lb = locations[b.id];
+                if (la == null && lb == null) return a.displayName.compareTo(b.displayName);
+                if (la == null) return 1;
+                if (lb == null) return -1;
+                return lb.recordedAt.compareTo(la.recordedAt);
+              });
             return Column(
               children: [
-                _FamilyMap(members: members, locations: locations),
+                if (locations.isNotEmpty) _FamilyMap(members: members, locations: locations),
                 Expanded(
                   child: ListView(
                     padding: const EdgeInsets.all(AppSpacing.md),
                     children: [
-                      for (final member in members)
-                        if (locations.containsKey(member.id))
-                          _MemberTile(member: member, location: locations[member.id]!),
+                      if (locations.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                          child: Text(
+                            'Nobody has shared a location yet — tap "Check in" to share yours.',
+                            style: context.appTypography.small
+                                .copyWith(color: context.appColors.gray[6]),
+                          ),
+                        ),
+                      for (final member in sorted)
+                        _MemberTile(member: member, location: locations[member.id]),
                     ],
                   ),
                 ),
@@ -155,20 +175,35 @@ class _MemberTile extends ConsumerWidget {
   const _MemberTile({required this.member, required this.location});
 
   final AppUser member;
-  final dynamic location;
+  final MemberLocation? location;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.appColors;
     final typography = context.appTypography;
-    final age = DateTime.now().difference(location.recordedAt as DateTime);
+    final location = this.location;
+    if (location == null) {
+      return Card(
+        margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: ListTile(
+          leading: MemberAvatar(user: member),
+          title: Text(member.displayName),
+          subtitle: Text(
+            'Not sharing yet',
+            style: typography.small.copyWith(color: colors.gray[5]),
+          ),
+          trailing: Icon(Icons.location_disabled_outlined, size: 18, color: colors.gray[4]),
+        ),
+      );
+    }
+    final age = DateTime.now().difference(location.recordedAt);
     final freshness = age.inMinutes < 1
         ? 'just now'
         : age.inHours < 1
             ? '${age.inMinutes} min ago'
             : '${age.inHours} h ago';
-    final lat = location.latitude as double;
-    final lng = location.longitude as double;
+    final lat = location.latitude;
+    final lng = location.longitude;
     final coords = '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}';
     final roundedKey = (
       double.parse(lat.toStringAsFixed(4)),
@@ -192,7 +227,7 @@ class _MemberTile extends ConsumerWidget {
                   Icon(
                     Icons.battery_std,
                     size: 16,
-                    color: (location.batteryPct as int) < 20 ? colors.danger : colors.success,
+                    color: location.batteryPct! < 20 ? colors.danger : colors.success,
                   ),
                   Text('${location.batteryPct}%', style: typography.caption),
                 ],

@@ -47,4 +47,22 @@ void main() {
     expect(colors.emerald900, const Color(0xFF0D4B45));
     expect(colors.ivory, isNot(Colors.black));
   });
+
+  testWidgets('an enabled text button is visibly distinct from a disabled one', (tester) async {
+    // Regression: TextButton/IconButton had no theme entry, so live
+    // controls rendered in near-black emerald900 at regular weight and
+    // were reported as looking greyed out. Enabled must not resolve to
+    // the disabled colour.
+    final theme = AppTheme.light();
+    final colors = theme.extension<AppColors>()!;
+    final style = theme.textButtonTheme.style!;
+
+    final enabled = style.foregroundColor!.resolve(<WidgetState>{});
+    final disabled = style.foregroundColor!.resolve(<WidgetState>{WidgetState.disabled});
+
+    expect(enabled, colors.emerald700);
+    expect(disabled, colors.disabled);
+    expect(enabled, isNot(disabled));
+    expect(style.textStyle!.resolve(<WidgetState>{})!.fontWeight, FontWeight.w600);
+  });
 }

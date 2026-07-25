@@ -612,3 +612,108 @@ artwork carries its own gold gradient and flat-tinting would discard it.
 
 Note on scope: Higgsfield generates images, not Flutter widgets, so it
 was used for artwork only. The screens themselves are hand-built.
+
+## Live-data pass (realtime, chat identity, invite email, affordances)
+
+### Realtime: `users` and `locations` were never published
+
+`supabase_realtime` carried only `messages` and `calls`. Everything else
+that looked "live" was a one-shot fetch that never refreshed, which
+produced two bugs that read as data loss:
+
+- a child who accepted an invite appeared on their own device (fresh
+  load, fresh fetch) but not in the parent's Family tab until the parent
+  fully restarted the app — `familyMembersProvider` was a
+  `FutureProvider` that only re-ran when the *signed-in user* changed,
+  and nothing told it a row had arrived;
+- "Live Location" only moved when the screen was rebuilt from scratch.
+
+Migration `20260725000004` adds both tables to the publication;
+`familyMembersProvider` and `latestLocationsProvider` are now
+`StreamProvider`s over `.stream()`. RLS still scopes both — publishing a
+table to realtime does not bypass row-level security, the socket
+re-checks policies per subscriber.
+
+`locations` has no server-side "latest per member" view, so the stream
+pulls the family's recent rows and reduces to the newest row per member
+client-side. If a family ever gets chatty enough for the 200-row window
+to drop someone, that reduction wants to move into a DB view.
+
+### Live Location lists every member, not just those with a position
+
+Previously a member only got a row once they had a `locations` record, so
+a family of four with one check-in showed one person and looked broken.
+Every member now renders; those without a position show "Not sharing
+yet". Members with a position sort first, freshest first.
+
+### Chat: your own messages now carry your name
+
+Only the other party's bubbles were labelled, so a thread read as one
+anonymous voice talking to named people. The name renders on every
+bubble; on your own (emerald fill) it takes an ivory tint rather than the
+sender accent, which wouldn't have had contrast.
+
+### Invite email: fixed for existing accounts, still rate-limited overall
+
+Two separate failures were in the auth logs:
+
+1. **`422: A user with this email address has already been registered`** —
+   a real bug. `inviteUserByEmail` only works for an address that has
+   never signed up; for anyone already registered it fails outright and
+   sends *nothing*. Invites to relatives who had previously created an
+   account (or been invited once before) died silently. Fixed: that case
+   now falls back to a magic-link OTP, which emails the same
+   `/#/join?code=…` redemption link.
+
+2. **`429: email rate limit exceeded` / `over_email_send_rate_limit`** —
+   not fixable in this repo. The project still sends through Supabase's
+   built-in SMTP (`noreply@mail.app.supabase.io`), which allows only a
+   couple of messages per hour on the current plan. **Human task:**
+   configure custom SMTP (Resend, Postmark, SendGrid) under Supabase →
+   Project Settings → Auth → SMTP Settings, and verify a sending domain.
+   Until then invite email stays best-effort, which is why the invite
+   dialog always shows a shareable link — that fallback is what actually
+   got the first child into the family. The dialog now names the rate
+   limit specifically instead of showing a generic failure, so a parent
+   isn't left retrying something that can't succeed yet.
+
+### Affordances: tappable text no longer reads as disabled
+
+`TextButton`, `IconButton`, and `FilledButton` had no theme entries, so
+they inherited Material defaults: near-black `emerald900` at regular
+weight for text buttons and a muted grey for icon buttons — visually
+identical to disabled controls and to plain body copy. Dialog actions,
+"Send invite", "Copy link", and the welcome-screen links all looked dead.
+Added themes for all three plus switches, checkboxes, list tiles, FABs,
+and progress indicators, and gave every button an explicit
+`disabledForegroundColor`/`disabledBackgroundColor` so a genuinely
+disabled control now looks different from an active one.
+
+### Uninstall protection for child devices: NOT implemented, needs a decision
+
+Requested: a child must not be able to uninstall the app. This cannot be
+done from this repo, and the two platforms differ sharply:
+
+- **iOS — not possible as a normal App Store app, at any price.** There
+  is no API that prevents deletion of your own app. The only mechanisms
+  are Screen Time's "Don't Allow Deleting Apps" restriction, which the
+  *parent* sets on the child's device behind a Screen Time passcode
+  (outside our app entirely, though we can guide them to it), or
+  enrolling the device in an MDM/Apple Business Manager supervision
+  programme, which is not appropriate for a family app and would fail
+  review as a consumer product. Attempting to block deletion would breach
+  CLAUDE.md's "Family Controls / Screen Time API only" rule.
+- **Android — technically possible, with real cost.** A Device Admin
+  receiver blocks uninstall while admin is active, but the child can
+  revoke admin in Settings unless we also become device owner (which
+  requires factory-reset provisioning). Google Play additionally
+  restricts the `Device Admin` deprecation path and reviews family apps
+  against the Families policy; a self-protecting, hard-to-remove app is
+  exactly the pattern Play's stalkerware policy targets, so this needs a
+  careful policy read before any code lands.
+
+Per CLAUDE.md ("ask before starting device-restriction code — these need
+platform entitlements a human has to do outside this repo first"), this
+is left unimplemented pending a decision on: Android Device Admin vs
+guided Screen Time setup only, and who does the Play Families policy
+review.

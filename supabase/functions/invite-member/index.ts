@@ -120,18 +120,43 @@ Deno.serve(async (req) => {
   // window we can still report truthfully whether it worked; if it
   // doesn't, we hand it to waitUntil so it completes after the response
   // and return emailed: null, meaning "still sending".
+  //
+  // `inviteUserByEmail` only works for an address that has never signed
+  // up — for anyone already registered it fails outright with
+  // "422: A user with this email address has already been registered"
+  // and sends nothing at all. That was silently killing invites to
+  // relatives who'd previously created an account (or been invited once
+  // before), and the parent just saw "couldn't email". For those, a
+  // magic-link OTP does the same job: it emails them a link that signs
+  // them in and lands them on the same /#/join?code=… redemption route.
   let emailed: boolean | null = null;
   let emailError: string | null = null;
-  const sending = admin.auth.admin
-    .inviteUserByEmail(email, { redirectTo: link })
-    .then(({ error }: { error: { message: string } | null }) => {
-      emailed = !error;
-      if (error) emailError = error.message;
-    })
-    .catch((e: unknown) => {
+
+  async function sendInviteEmail(): Promise<void> {
+    const invited = await admin.auth.admin.inviteUserByEmail(email!, { redirectTo: link });
+    if (!invited.error) {
+      emailed = true;
+      return;
+    }
+    const alreadyRegistered = invited.error.status === 422 ||
+      /already been registered|email_exists/i.test(invited.error.message);
+    if (!alreadyRegistered) {
       emailed = false;
-      emailError = `${e}`;
+      emailError = invited.error.message;
+      return;
+    }
+    const { error: otpError } = await admin.auth.signInWithOtp({
+      email: email!,
+      options: { emailRedirectTo: link, shouldCreateUser: false },
     });
+    emailed = !otpError;
+    if (otpError) emailError = otpError.message;
+  }
+
+  const sending = sendInviteEmail().catch((e: unknown) => {
+    emailed = false;
+    emailError = `${e}`;
+  });
 
   const outcome = await Promise.race([
     sending.then(() => 'sent'),

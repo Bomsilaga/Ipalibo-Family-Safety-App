@@ -312,8 +312,15 @@ class FamilyMembersScreen extends ConsumerWidget {
           children: [
             Text(switch (result.emailed) {
               true => 'We emailed ${result.email}. They tap the link and they\'re in — no code to type.',
-              false =>
-                'We couldn\'t email ${result.email} right now, so send them this link instead. It adds them to your family when they open it.',
+              // Name the rate limit rather than leaving it as a mystery
+              // failure: it's the single most common cause (the project
+              // is still on Supabase's built-in SMTP, which allows only a
+              // couple of sends per hour) and it tells the parent that
+              // retrying in a minute won't help — share the link instead.
+              false => result.emailError != null &&
+                      RegExp('rate limit', caseSensitive: false).hasMatch(result.emailError!)
+                  ? 'Our email allowance is used up for now, so send ${result.email} this link instead. It adds them to your family when they open it.'
+                  : 'We couldn\'t email ${result.email} right now, so send them this link instead. It adds them to your family when they open it.',
               // Still sending — don't claim it arrived, don't claim it
               // failed. The link works either way.
               null =>
