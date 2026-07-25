@@ -514,3 +514,72 @@ Verified end-to-end against the live project afterwards: the target's
 still resolves), `chat_members`/`devices`/`locations` rows are gone, an
 `audit_log` row is written, and both guards hold — removing yourself is
 rejected, and so is removing someone in another family.
+
+## Advisor sweep (security + performance)
+
+Ran Supabase's security and performance linters across the whole project
+and fixed what was genuinely wrong. Security lints went 31 → 2.
+
+**Fixed — `families` INSERT was `with check (true)`.** Any signed-in user
+could create a family row attributed to somebody else by passing an
+arbitrary `created_by`. Creating your *own* family is legitimate (it's
+the founder bootstrap), so the policy now pins the row to the caller
+(`created_by = auth.uid()`) rather than forbidding the insert. Verified
+both directions: creating your own family still succeeds, creating one
+attributed to another user is now rejected.
+
+**Fixed — trigger functions were callable as SECURITY DEFINER RPCs.**
+`enforce_users_guardrails`, `enforce_completion_approval`,
+`enforce_message_update_rules`, `touch_updated_at`,
+`trigger_chat_fanout`, `create_family_group_chat` and
+`join_family_group_chat` were all reachable at `/rest/v1/rpc/*`. Postgres
+invokes triggers on the table without consulting EXECUTE grants, so
+revoking costs nothing and removes seven privileged entry points.
+
+**Fixed — RLS helper functions were executable by `anon`.** The first
+attempt (revoking from `anon`) did nothing, because Postgres grants
+EXECUTE to PUBLIC by default and `anon` inherits it; the grant has to be
+removed from PUBLIC and handed back explicitly. `authenticated` keeps
+EXECUTE — these run inside RLS policy expressions, which Postgres
+evaluates as the querying role, so revoking there would break every
+family-scoped policy. Verified after the change: all twelve family-scoped
+tables still read correctly for a signed-in user, and `anon` now gets 401
+calling `current_family_id` / `is_parent`.
+
+**Fixed — 42 unindexed foreign keys.** Added covering indexes. Beyond the
+usual join cost, `remove-member` deletes by `user_id` across
+`chat_members`, `devices` and `locations`, and the junction tables
+(`task_assignees`, `event_participants`, `message_receipts`,
+`message_reactions`, `chat_members`) have composite PKs whose leading
+column is the other side, so lookups by `user_id` had no usable index.
+
+**Deliberately not done — `auth_rls_initplan` (39 warnings).** These
+policies call `auth.uid()` per row rather than once, and the fix is
+mechanically rewriting 39 policy expressions to wrap them in
+`(select …)`. At family scale (single-digit users, thousands of rows) the
+gain is unmeasurable, and rewriting the entire verified security model in
+one pass to chase it is a bad trade. Worth doing behind proper policy
+tests if the data ever grows.
+
+**Needs dashboard access — leaked-password protection is off.** Supabase
+Auth can reject passwords found in HaveIBeenPwned breaches; it's a toggle
+under Authentication → Providers → Password, not something that can be
+set from a migration.
+
+### Invite latency: email send no longer blocks the response
+
+`invite-member` awaited `inviteUserByEmail` before responding, and
+Supabase's SMTP round trip regularly took 6–10s — the parent watched a
+spinner that whole time even though the code and link were ready almost
+immediately. The send is now raced against a 2.5s timeout: if it lands
+inside the window the response still reports truthfully whether it
+worked; if not it's handed to `EdgeRuntime.waitUntil` to finish after the
+response, and `emailed` comes back `null`. The audit-log insert is
+backgrounded the same way. Measured after the change: ~3.6s, down from
+6–10s.
+
+`emailed` is therefore tri-state, and `InviteResult.emailed` is
+`bool?` to match — `true` sent, `false` failed (usually the SMTP rate
+limit), `null` still sending. Collapsing `null` into `false` would tell a
+parent the email failed when it's most likely about to arrive, so the
+dialog has a third copy variant for it.

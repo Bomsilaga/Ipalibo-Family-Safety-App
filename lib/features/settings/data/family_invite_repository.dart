@@ -74,7 +74,10 @@ class FamilyInviteRepository {
       code: data['code'] as String,
       link: data['link'] as String,
       email: data['email'] as String? ?? email.trim(),
-      emailed: data['emailed'] == true,
+      // Deliberately tri-state — null means the send hadn't finished
+      // within the function's timeout and is completing in the
+      // background, which is different from "it failed".
+      emailed: data['emailed'] as bool?,
       emailError: data['email_error'] as String?,
     );
   }
@@ -122,6 +125,12 @@ class FamilyInviteRepository {
 /// working [link]/[code]; [emailed] only says whether we also managed to
 /// send the email, so the UI can offer sharing as a fallback instead of a
 /// dead end.
+///
+/// [emailed] is tri-state on purpose: `true` sent, `false` failed (usually
+/// Supabase's SMTP rate limit), and `null` still sending in the background
+/// because it outran the function's timeout. Collapsing null into false
+/// would tell a parent the email failed when it's probably about to
+/// arrive.
 class InviteResult {
   const InviteResult({
     required this.code,
@@ -134,7 +143,7 @@ class InviteResult {
   final String code;
   final String link;
   final String email;
-  final bool emailed;
+  final bool? emailed;
   final String? emailError;
 }
 
