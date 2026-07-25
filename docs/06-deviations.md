@@ -489,3 +489,28 @@ doesn't start until the user taps the video.
 - **The APK is signed with the debug key.** `android/app/build.gradle.kts`
   still uses `signingConfigs.debug` for release. Fine for sideloading to
   try it out; a Play Store upload needs a real keystore.
+
+### RLS: `enforce_users_guardrails` blocked its own Edge Functions
+
+Live-testing `remove-member` returned "only a parent can change role or
+family membership" on every call, from the *database trigger*, not from
+the function's own checks. `enforce_users_guardrails` guards role and
+family-membership changes by calling `public.is_parent()`, which reads
+`auth.uid()`. Service-role connections carry no JWT, so `auth.uid()` is
+null, `is_parent()` is false, and the trigger rejected the write —
+`remove-member` sets `users.family_id = null`, which is exactly the
+condition being guarded.
+
+Fixed in `20260725000001_users_guardrail_allow_service_role.sql` by
+exempting `auth.role() = 'service_role'` from the `is_parent()` check
+only. The service role reaches that path solely through Edge Functions
+that already verify server-side that the caller is an authenticated
+parent acting inside their own family, so the property that matters — a
+child cannot move themselves between families or promote themselves —
+is preserved. The last-parent rules still apply to every caller.
+
+Verified end-to-end against the live project afterwards: the target's
+`family_id` goes null, their `users` row survives (so family history
+still resolves), `chat_members`/`devices`/`locations` rows are gone, an
+`audit_log` row is written, and both guards hold — removing yourself is
+rejected, and so is removing someone in another family.
