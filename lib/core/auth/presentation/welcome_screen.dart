@@ -28,7 +28,9 @@ class WelcomeScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Spacer(flex: 3),
-              Center(child: BrandCrest(size: 96, color: colors.gold500)),
+              // No colour override — the artwork carries its own gold
+              // gradient, and flat-tinting it would throw that away.
+              const Center(child: BrandCrest(size: 104)),
               const SizedBox(height: AppSpacing.lg),
               Text(
                 'THE\nIPALIBOS',
