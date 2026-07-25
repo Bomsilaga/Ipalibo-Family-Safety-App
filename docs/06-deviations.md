@@ -583,3 +583,32 @@ backgrounded the same way. Measured after the change: ~3.6s, down from
 limit), `null` still sending. Collapsing `null` into `false` would tell a
 parent the email failed when it's most likely about to arrive, so the
 dialog has a third copy variant for it.
+
+### Brand: real crest artwork replaces the Dart-drawn approximation
+
+The app shipped with Flutter's stock launcher icon on Android and web,
+and `BrandCrest` approximated the mockup's laurel crest out of two
+mirrored `Icons.eco_outlined` glyphs plus a bordered circle — at any size
+it read as "two leaves beside a letter", not a wreath.
+
+Generated the crest (gold laurel wreath around an `I` monogram on
+emerald) with Higgsfield, then post-processed it locally rather than
+using the render as-is:
+
+- the model's background came out `rgb(14,71,62)`, close to but not equal
+  to the `emerald900` token `#0D4B45`; repainted to the exact token so
+  the icon matches app chrome instead of *nearly* matching, which reads
+  as a mistake;
+- keyed the background to transparency for `assets/brand/crest.png`, so
+  one file works on both the emerald welcome screen and the ivory
+  sign-in screen without a background plate;
+- generated all five Android launcher densities, web/PWA 192 and 512,
+  and the favicon;
+- the maskable PWA icons inset the artwork to ~72% so Android's circular
+  mask doesn't crop the wreath.
+
+`BrandCrest` no longer accepts a colour override at its call sites — the
+artwork carries its own gold gradient and flat-tinting would discard it.
+
+Note on scope: Higgsfield generates images, not Flutter widgets, so it
+was used for artwork only. The screens themselves are hand-built.

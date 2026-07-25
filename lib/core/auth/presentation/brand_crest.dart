@@ -2,51 +2,34 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 
-/// The gold laurel crest from the brand mockup. Drawn rather than shipped
-/// as an asset so it stays crisp at any size and picks up the theme's gold
-/// token instead of baking a colour into a PNG.
+/// The gold laurel crest from the brand mockup.
+///
+/// This was previously approximated in Dart out of two mirrored
+/// `Icons.eco_outlined` glyphs and a bordered circle, which read as
+/// "two leaves next to a letter" rather than as a wreath. It's now the
+/// real artwork (`assets/brand/crest.png`), keyed to transparency so the
+/// same file sits on the emerald welcome screen and the ivory sign-in
+/// screen without a background plate.
 class BrandCrest extends StatelessWidget {
   const BrandCrest({super.key, this.size = 72, this.color});
 
   final double size;
+
+  /// Tints the crest. Left null the artwork keeps its own gold gradient,
+  /// which is what the mockup shows.
   final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    final gold = color ?? context.appColors.gold500;
-    return SizedBox(
+    return Image.asset(
+      'assets/brand/crest.png',
       width: size,
       height: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Laurel wreath: two mirrored arcs opening at the top, the way
-          // the crest reads in the mockup.
-          Icon(Icons.eco_outlined, size: size * 0.92, color: gold.withValues(alpha: 0.55)),
-          Transform.flip(
-            flipX: true,
-            child: Icon(Icons.eco_outlined, size: size * 0.92, color: gold.withValues(alpha: 0.55)),
-          ),
-          Container(
-            width: size * 0.52,
-            height: size * 0.52,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: gold, width: size * 0.035),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              'I',
-              style: TextStyle(
-                color: gold,
-                fontSize: size * 0.30,
-                fontWeight: FontWeight.w600,
-                height: 1,
-              ),
-            ),
-          ),
-        ],
-      ),
+      color: color,
+      filterQuality: FilterQuality.medium,
+      // The crest is decorative — the wordmark beside it already carries
+      // the name for screen readers.
+      excludeFromSemantics: true,
     );
   }
 }
