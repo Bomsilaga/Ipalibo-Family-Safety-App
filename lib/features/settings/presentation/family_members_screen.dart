@@ -259,24 +259,38 @@ class FamilyMembersScreen extends ConsumerWidget {
     );
     if (proceed != true || emailController.text.trim().isEmpty || !context.mounted) return;
 
+    // showDialog pushes onto the ROOT navigator by default, but this
+    // screen sits inside a StatefulShellRoute branch, so its own context
+    // resolves to the *branch* navigator. Popping via the screen context
+    // therefore dismissed the /family page instead of the spinner and
+    // emptied the branch stack — a white screen with no error. Hold the
+    // same navigator the dialog was pushed to and pop that.
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const Center(child: CircularProgressIndicator()),
+      builder: (_) => const Center(child: CircularProgressIndicator()),
     );
+
+    InviteResult? result;
+    Object? failure;
     try {
-      final result = await ref.read(familyInviteRepositoryProvider).inviteMember(
+      result = await ref.read(familyInviteRepositoryProvider).inviteMember(
             email: emailController.text.trim(),
             role: role,
           );
-      if (!context.mounted) return;
-      Navigator.pop(context); // dismiss the spinner
-      await _showInviteResult(context, result);
     } catch (e) {
-      if (!context.mounted) return;
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not send invite: $e')));
+      failure = e;
     }
+
+    if (rootNavigator.canPop()) rootNavigator.pop(); // dismiss the spinner
+    if (!context.mounted) return;
+    if (failure != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Could not send invite: $failure')));
+      return;
+    }
+    await _showInviteResult(context, result!);
   }
 
   /// Always offers the link, even on a successful send: Supabase's

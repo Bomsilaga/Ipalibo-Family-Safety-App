@@ -1,6 +1,34 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Flutter's template only declares INTERNET in the debug/ and
+         profile/ manifests, so a *release* build ships without it and
+         every Supabase call fails silently on a real device. It has to be
+         declared here to end up in the release APK. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <!-- Biometric app lock (local_auth) -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+
+    <!-- Live Location / SOS check-ins (geolocator). COARSE is declared
+         alongside FINE because Android 12+ lets the user grant only
+         approximate location, and the app must still work in that case. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
+    <!-- Voice/video calls (Daily.co room in a WebView) and chat photo
+         attachments. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+
+    <!-- Reminder/notification delivery (flutter_local_notifications). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+    <!-- The camera is used for call video and attachments, but a device
+         without one should still be able to install and use everything
+         else. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
+
     <application
         android:label="The Ipalibos"
         android:name="${applicationName}"
