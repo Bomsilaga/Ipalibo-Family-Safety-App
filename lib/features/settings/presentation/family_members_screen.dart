@@ -41,7 +41,7 @@ class FamilyMembersScreen extends ConsumerWidget {
             ? FloatingActionButton(
                 backgroundColor: colors.gold500,
                 foregroundColor: colors.emerald900,
-                onPressed: () => _openAddMemberSheet(context, ref, user),
+                onPressed: () => _addFamilyMemberFlow(context, ref, user),
                 child: const Icon(Icons.person_add_alt_1_outlined),
               )
             : null,
@@ -79,7 +79,7 @@ class FamilyMembersScreen extends ConsumerWidget {
                           if (others.isEmpty) {
                             return const EmptyState(
                               icon: Icons.group_add_outlined,
-                              message: 'Invite a co-parent or add a child to get started.',
+                              message: 'Tap the + button to add a co-parent or child.',
                             );
                           }
                           return ListView(
@@ -155,83 +155,48 @@ class FamilyMembersScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _openAddMemberSheet(BuildContext context, WidgetRef ref, AppUser me) async {
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.person_add_alt_1_outlined),
-              title: const Text('Invite a co-parent'),
-              subtitle: const Text('Generates a code to share with them'),
-              onTap: () => Navigator.pop(ctx, 'invite'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.child_care_outlined),
-              title: const Text('Add a child'),
-              subtitle: const Text('Generates a code for them to join with their own email'),
-              onTap: () => Navigator.pop(ctx, 'child'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (choice == null || !context.mounted) return;
-    if (choice == 'invite') {
-      await _generateInviteFlow(
-        context,
-        ref,
-        me,
-        role: 'parent',
-        dialogTitle: 'Invite a co-parent',
-        emailHint: 'Their email',
-      );
-    } else {
-      await _generateInviteFlow(
-        context,
-        ref,
-        me,
-        role: 'child',
-        dialogTitle: 'Add a child',
-        emailHint: "Child's email",
-      );
-    }
-  }
-
-  /// Shared by "Invite a co-parent" and "Add a child" — both join an
-  /// *existing* family the same way (docs/06-deviations.md "founder
-  /// bootstrap"): a parent generates a code here, the invitee creates
-  /// their own account with their own email on the sign-in screen, then
-  /// redeems the code on the family-setup screen's "I have an invite
-  /// code" branch. accept-invite assigns whatever role the invite
-  /// carries, so a child invite is identical to a co-parent invite
-  /// except role: 'child' — children now sign in with their own
-  /// email/password like everyone else, not a parent-set device PIN.
-  Future<void> _generateInviteFlow(
-    BuildContext context,
-    WidgetRef ref,
-    AppUser me, {
-    required String role,
-    required String dialogTitle,
-    required String emailHint,
-  }) async {
+  /// One dialog for both roles — a parent and a child join a family the
+  /// exact same way (docs/06-deviations.md "founder bootstrap"): pick who
+  /// this is for, enter their email, get a code. No separate picker
+  /// screen, no different fields for kids — the only thing that differs
+  /// server-side is the `role` recorded on the invite row, which
+  /// `accept-invite` already honours generically.
+  Future<void> _addFamilyMemberFlow(BuildContext context, WidgetRef ref, AppUser me) async {
     if (me.familyId == null) return;
     final emailController = TextEditingController();
+    String role = 'child';
     final proceed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(dialogTitle),
-        content: TextField(
-          controller: emailController,
-          keyboardType: TextInputType.emailAddress,
-          decoration: InputDecoration(hintText: emailHint),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Add a family member'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Who is this for?'),
+              const SizedBox(height: AppSpacing.sm),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'child', label: Text('Child'), icon: Icon(Icons.child_care_outlined)),
+                  ButtonSegment(value: 'parent', label: Text('Co-parent'), icon: Icon(Icons.person_outline)),
+                ],
+                selected: {role},
+                onSelectionChanged: (selection) => setState(() => role = selection.first),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              TextField(
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(hintText: 'Their email'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Generate code')),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Generate code')),
-        ],
       ),
     );
     // family_invites requires an email or phone on the row (there's no
